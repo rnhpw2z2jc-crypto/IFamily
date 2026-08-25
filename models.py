@@ -1,18 +1,29 @@
 """
 MODEL
 -----
-Toda la lógica de datos y de negocio vive aquí. Esta capa no importa
-streamlit ni sabe nada de la interfaz: solo habla con Firebase y aplica
-reglas (por ejemplo, calcular si una cita es "Hoy", "Esta semana", etc.).
-Así, si el día de mañana cambian de Firebase a otra base de datos, solo
-se toca este archivo.
+Toda la lógica de datos y de negocio vive aquí. Soporta múltiples
+familias por usuario y sistema de roles (admin / miembro).
 """
 
+import hashlib
 import json
+import uuid
 from datetime import date, datetime
 
 import firebase_admin
 from firebase_admin import credentials, db
+
+
+# -------------------------------------------------------------
+# CREDENCIALES ADMIN PREDEFINIDAS
+# -------------------------------------------------------------
+ADMIN_CREDENTIALS = {
+    "user_id": "admin_ifamily_001",
+    "nombre": "Administrador iFamily",
+    "email": "admin@ifamily.com",
+    "password_hash": hashlib.sha256("Admin123456".encode()).hexdigest(),
+    "rol": "admin",
+}
 
 
 # -------------------------------------------------------------
@@ -52,15 +63,224 @@ class FirebaseService:
 
 
 # -------------------------------------------------------------
-# MODELO: CITAS MÉDICAS
+# MODELO: USUARIOS
+# -------------------------------------------------------------
+class UserModel:
+    """Gestión de usuarios, autenticación y perfiles."""
+
+    def __init__(self, firebase_service: FirebaseService):
+        self.ref = firebase_service.reference("users")
+
+    def get_by_id(self, user_id):
+        data = self.ref.child(user_id).get()
+        return data or {}
+
+    def create_or_update(self, user_id, nombre, email="", photo_url=""):
+        existing = self.get_by_id(user_id)
+        now = str(datetime.now())
+
+        if existing:
+            self.ref.child(user_id).update({
+                "nombre": nombre,
+                "email": email,
+                "photo_url": photo_url,
+                "last_login": now,
+            })
+        else:
+            self.ref.child(user_id).set({
+                "user_id": user_id,
+                "nombre": nombre,
+                "email": email,
+                "photo_url": photo_url,
+                "rol": "miembro",
+                "familias": {},
+                "familia_activa": "",
+                "created_at": now,
+                "last_login": now,
+            })
+
+    def get_familias(self, user_id):
+        user = self.get_by_id(user_id)
+        return user.get("familias", {})
+
+    def add_familia_to_user(self, user_id, familia_id, familia_nombre, rol_en_familia="miembro"):
+        self.ref.child(user_id).child("familias").child(familia_id).set({
+            "nombre": familia_nombre,
+            "rol_en_familia": rol_en_familia,
+        })
+
+    def set_familia_activa(self, user_id, familia_id):
+        self.ref.child(user_id).update({"familia_activa": familia_id})
+
+    def get_familia_activa(self, user_id):
+        user = self.get_by_id(user_id)
+        return user.get("familia_activa", "")
+
+    def update_rol(self, user_id, rol):
+        self.ref.child(user_id).update({"rol": rol})
+
+    def is_admin(self, user_id):
+        user = self.get_by_id(user_id)
+        return user.get("rol") == "admin"
+
+    def get_all_users(self):
+        return self.ref.get() or {}
+
+    def create_user_by_admin(self, nombre, email, password, rol="miembro"):
+        """Crea un usuario nuevo desde el panel de admin."""
+        users = self.get_all_users()
+
+        for uid, udata in users.items():
+            if udata.get("nombre", "").lower() == nombre.lower():
+                return None, "Ya existe un usuario con ese nombre"
+
+        user_id = "user_" + str(uuid.uuid4())[:8]
+        now = str(datetime.now())
+
+        self.ref.child(user_id).set({
+            "user_id": user_id,
+            "nombre": nombre,
+            "email": email,
+            "photo_url": "",
+            "rol": rol,
+            "password_hash": hashlib.sha256(password.encode()).hexdigest(),
+            "familias": {},
+            "familia_activa": "",
+            "created_at": now,
+            "last_login": now,
+            "creado_por_admin": True,
+        })
+
+        return user_id, None
+
+    def delete_user(self, user_id):
+        """Elimina un usuario (solo admin)."""
+        if user_id == ADMIN_CREDENTIALS["user_id"]:
+            return False, "No se puede eliminar la cuenta admin"
+        self.ref.child(user_id).delete()
+        return True, None
+
+    def reset_password(self, user_id, new_password):
+        """Resetea la contraseña de un usuario (solo admin)."""
+        self.ref.child(user_id).update({
+            "password_hash": hashlib.sha256(new_password.encode()).hexdigest()
+        })
+        return True, None
+
+    def init_admin_account(self):
+        """Crea la cuenta admin si no existe."""
+        existing = self.get_by_id(ADMIN_CREDENTIALS["user_id"])
+        if not existing:
+            self.ref.child(ADMIN_CREDENTIALS["user_id"]).set({
+                "user_id": ADMIN_CREDENTIALS["user_id"],
+                "nombre": ADMIN_CREDENTIALS["nombre"],
+                "email": ADMIN_CREDENTIALS["email"],
+                "rol": "admin",
+                "password_hash": ADMIN_CREDENTIALS["password_hash"],
+                "familias": {},
+                "familia_activa": "",
+                "created_at": str(datetime.now()),
+                "last_login": str(datetime.now()),
+                "es_admin_inicial": True,
+            })
+
+
+# -------------------------------------------------------------
+# MODELO: FAMILIAS
+# -------------------------------------------------------------
+class FamilyModel:
+    """Gestión de familias: creación, unión y miembros."""
+
+    def __init__(self, firebase_service: FirebaseService):
+        self.ref = firebase_service.reference("families")
+        self.user_model = UserModel(firebase_service)
+        self.firebase_service = firebase_service
+
+    def create(self, nombre, creador_id):
+        import uuid
+        familia_id = str(uuid.uuid4())[:8]
+        now = str(datetime.now())
+
+        self.ref.child(familia_id).set({
+            "family_id": familia_id,
+            "nombre": nombre,
+            "creado_por": creador_id,
+            "created_at": now,
+            "miembros": {
+                creador_id: {
+                    "nombre": self.user_model.get_by_id(creador_id).get("nombre", ""),
+                    "rol_en_familia": "admin",
+                    "unido_en": now,
+                }
+            },
+            "codigo_invitacion": familia_id.upper(),
+        })
+
+        self.user_model.add_familia_to_user(creador_id, familia_id, nombre, "admin")
+        self.user_model.set_familia_activa(creador_id, familia_id)
+
+        return familia_id
+
+    def join(self, user_id, codigo_invitacion):
+        familias = self.ref.get() or {}
+        for fid, fdata in familias.items():
+            if fdata.get("codigo_invitacion", "").upper() == codigo_invitacion.upper():
+                now = str(datetime.now())
+                user_data = self.user_model.get_by_id(user_id)
+
+                self.ref.child(fid).child("miembros").child(user_id).set({
+                    "nombre": user_data.get("nombre", ""),
+                    "rol_en_familia": "miembro",
+                    "unido_en": now,
+                })
+
+                self.user_model.add_familia_to_user(user_id, fid, fdata.get("nombre", ""), "miembro")
+                self.user_model.set_familia_activa(user_id, fid)
+
+                return fid, fdata.get("nombre", "")
+        return None, None
+
+    def get_miembros(self, familia_id):
+        data = self.ref.child(familia_id).child("miembros").get()
+        return data or {}
+
+    def get_familia(self, familia_id):
+        return self.ref.child(familia_id).get() or {}
+
+    def get_codigo_invitacion(self, familia_id):
+        data = self.ref.child(familia_id).child("codigo_invitacion").get()
+        return data or ""
+
+    def is_miembro(self, familia_id, user_id):
+        miembros = self.get_miembros(familia_id)
+        return user_id in miembros
+
+    def get_user_familias(self, user_id):
+        user_familias = self.user_model.get_familias(user_id)
+        if not user_familias:
+            return []
+        result = []
+        for fid, fdata in user_familias.items():
+            familia = self.get_familia(fid)
+            if familia:
+                result.append({
+                    "id": fid,
+                    "nombre": familia.get("nombre", fdata.get("nombre", "")),
+                    "rol_en_familia": fdata.get("rol_en_familia", "miembro"),
+                    "miembros_count": len(familia.get("miembros", {})),
+                })
+        return result
+
+
+# -------------------------------------------------------------
+# MODELO: CITAS MÉDICAS (multi-familia)
 # -------------------------------------------------------------
 class CitaModel:
     """Reglas de negocio y acceso a datos para las citas médicas."""
 
-    def __init__(self, firebase_service: FirebaseService):
-        self.ref = firebase_service.reference("citas")
+    def __init__(self, firebase_service: FirebaseService, familia_id: str):
+        self.ref = firebase_service.reference(f"familia_data/{familia_id}/citas")
 
-    # --- Lectura ---
     def get_all(self):
         data = self.ref.get() if self.ref else None
         return data or {}
@@ -72,14 +292,12 @@ class CitaModel:
         return {k: v for k, v in self.get_all().items() if v.get("estado") == "realizada"}
 
     def proxima_cita(self):
-        """Devuelve (key, cita) de la cita programada más cercana, o (None, None)."""
         programadas = self.get_programadas()
         if not programadas:
             return None, None
         ordenadas = sorted(programadas.items(), key=lambda i: (i[1].get("fecha", ""), i[1].get("hora", "")))
         return ordenadas[0]
 
-    # --- Escritura ---
     def crear(self, paciente, especialidad, lugar, fecha, hora, notas, usuario):
         nueva_cita = {
             "paciente": paciente,
@@ -107,10 +325,8 @@ class CitaModel:
     def eliminar(self, key):
         self.ref.child(key).delete()
 
-    # --- Reglas de negocio (presentación derivada de los datos) ---
     @staticmethod
     def estado_visual(fecha_str):
-        """Clasifica una fecha de cita en Hoy / Esta semana / Próximamente / Atrasada."""
         try:
             f = datetime.strptime(fecha_str, "%Y-%m-%d").date()
         except (ValueError, TypeError):
@@ -136,7 +352,7 @@ class CitaModel:
 
 
 # -------------------------------------------------------------
-# MODELO: SERVICIOS PÚBLICOS
+# MODELO: SERVICIOS PÚBLICOS (multi-familia)
 # -------------------------------------------------------------
 class ServicioModel:
     """Reglas de negocio y acceso a datos para los códigos de servicios."""
@@ -146,8 +362,8 @@ class ServicioModel:
         "🌐 Internet": "🌐", "📞 Teléfono": "📞", "Otro": "🧾",
     }
 
-    def __init__(self, firebase_service: FirebaseService):
-        self.ref = firebase_service.reference("servicios")
+    def __init__(self, firebase_service: FirebaseService, familia_id: str):
+        self.ref = firebase_service.reference(f"familia_data/{familia_id}/servicios")
 
     def get_all(self):
         data = self.ref.get() if self.ref else None

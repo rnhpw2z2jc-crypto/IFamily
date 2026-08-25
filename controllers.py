@@ -1,45 +1,457 @@
 """
 CONTROLLER
 ----------
-Recibe la interacción del usuario (formularios, botones), valida,
-llama al Model para persistir o leer datos, y dispara st.rerun().
-No define estilos ni CSS (eso es de views.py), aunque sí usa las
-funciones de views.py para pintar tarjetas dentro de su flujo.
-
-En Streamlit, el "control de eventos" y el "widget" viven en la misma
-línea de código por cómo funciona el framework (a diferencia de un MVC
-web clásico con rutas separadas). Por eso cada método de acá agrupa
-"dibujar el formulario" + "manejar su envío" — es la forma más fiel de
-Controller que el propio Streamlit permite.
+Maneja autenticación, familias, formularios y eventos.
+Conecta directamente con el backend (models.py).
 """
 
 from datetime import date
 
 import streamlit as st
 
-from models import CitaModel, ServicioModel
+from models import (
+    FirebaseService, UserModel, FamilyModel,
+    CitaModel, ServicioModel,
+)
 import views
 
 
 # -------------------------------------------------------------
-# CONTROLADOR: IDENTIFICACIÓN DEL USUARIO (barra lateral)
+# CONTROLADOR: AUTENTICACIÓN
+# -------------------------------------------------------------
+class AuthController:
+    """Manejo de sesión: registro, login y switch de familias."""
+
+    def __init__(self, user_model: UserModel, family_model: FamilyModel):
+        self.user_model = user_model
+        self.family_model = family_model
+
+    def _generate_session_id(self):
+        import uuid
+        return str(uuid.uuid4())[:12]
+
+    def render_login(self):
+        views.inject_auth_css()
+
+        if "auth_mode" not in st.session_state:
+            st.session_state.auth_mode = "login"
+
+        st.markdown("""
+        <div class="auth-container">
+            <div class="auth-logo">
+                <div class="auth-logo-icon">🏠</div>
+            </div>
+            <div class="auth-title">iFamily</div>
+            <div class="auth-subtitle">Control familiar inteligente</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.container():
+            if st.session_state.auth_mode == "login":
+                self._render_login_form()
+            elif st.session_state.auth_mode == "register":
+                self._render_register_form()
+
+    def _render_login_form(self):
+        with st.form("login_form"):
+            st.markdown("**Iniciar Sesión**")
+            nombre = st.text_input("Tu nombre", placeholder="Ej. Carlos")
+            email = st.text_input("Email (opcional)", placeholder="tu@email.com")
+            password = st.text_input("Contraseña", type="password", placeholder="Mínimo 6 caracteres")
+
+            if st.form_submit_button("Iniciar Sesión", use_container_width=True):
+                if not nombre or not password:
+                    st.error("Completa tu nombre y contraseña.")
+                elif len(password) < 6:
+                    st.error("La contraseña debe tener al menos 6 caracteres.")
+                else:
+                    user_id = self._login(nombre, email, password)
+                    if user_id:
+                        st.session_state.user_id = user_id
+                        st.session_state.nombre_usuario = nombre
+                        st.rerun()
+                    else:
+                        st.error("Credenciales incorrectas. Verifica tu nombre y contraseña.")
+
+        st.markdown("""
+        <div class="auth-link">
+            ¿No tienes cuenta? <a href="#">Regístrate aquí</a>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("Crear nueva cuenta", use_container_width=True):
+            st.session_state.auth_mode = "register"
+            st.rerun()
+
+    def _render_register_form(self):
+        with st.form("register_form"):
+            st.markdown("**Crear Cuenta**")
+            nombre = st.text_input("Tu nombre completo", placeholder="Ej. Carlos García")
+            email = st.text_input("Email", placeholder="tu@email.com")
+            password = st.text_input("Contraseña", type="password", placeholder="Mínimo 6 caracteres")
+            password2 = st.text_input("Confirmar contraseña", type="password")
+
+            if st.form_submit_button("Crear Cuenta", use_container_width=True):
+                if not nombre or not password:
+                    st.error("Completa todos los campos.")
+                elif len(password) < 6:
+                    st.error("La contraseña debe tener al menos 6 caracteres.")
+                elif password != password2:
+                    st.error("Las contraseñas no coinciden.")
+                else:
+                    user_id = self._register(nombre, email, password)
+                    if user_id:
+                        st.session_state.user_id = user_id
+                        st.session_state.nombre_usuario = nombre
+                        st.success("¡Cuenta creada!")
+                        st.rerun()
+                    else:
+                        st.error("Error al crear la cuenta.")
+
+        st.markdown("""
+        <div class="auth-link">
+            ¿Ya tienes cuenta? <a href="#">Inicia sesión</a>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("Volver al login", use_container_width=True):
+            st.session_state.auth_mode = "login"
+            st.rerun()
+
+    def _login(self, nombre, email, password):
+        """Login: verifica admin predefinido primero, luego usuarios de Firebase."""
+        from models import ADMIN_CREDENTIALS
+
+        if (nombre.lower() == ADMIN_CREDENTIALS["nombre"].lower() and
+                self._hash_password(password) == ADMIN_CREDENTIALS["password_hash"]):
+            self.user_model.init_admin_account()
+            return ADMIN_CREDENTIALS["user_id"]
+
+        users = self.user_model.get_all_users()
+        for uid, udata in users.items():
+            if (udata.get("nombre", "").lower() == nombre.lower() and
+                    udata.get("password_hash", "") == self._hash_password(password)):
+                return uid
+        return None
+
+    def _register(self, nombre, email, password):
+        """Registro: crea usuario nuevo."""
+        import uuid
+        user_id = "user_" + str(uuid.uuid4())[:8]
+
+        users = self.user_model.get_all_users()
+        for uid, udata in users.items():
+            if udata.get("nombre", "").lower() == nombre.lower():
+                return None
+
+        self.user_model.create_or_update(user_id, nombre, email)
+        self.user_model.ref.child(user_id).update({
+            "password_hash": self._hash_password(password)
+        })
+        return user_id
+
+    def _hash_password(self, password):
+        """Hash simple para demo. En producción usar bcrypt."""
+        import hashlib
+        return hashlib.sha256(password.encode()).hexdigest()
+
+    def check_session(self):
+        return "user_id" in st.session_state and st.session_state.user_id
+
+    def logout(self):
+        for key in ["user_id", "nombre_usuario", "familia_activa", "familia_id"]:
+            st.session_state.pop(key, None)
+        st.rerun()
+
+    def render_sidebar_session(self, user_model, family_model):
+        with st.sidebar:
+            user_id = st.session_state.user_id
+            user_data = user_model.get_by_id(user_id)
+            nombre = user_data.get("nombre", "Sin nombre")
+
+            familias = family_model.get_user_familias(user_id)
+
+            if familias:
+                familia_activa_id = user_model.get_familia_activa(user_id)
+
+                nombres_familias = [f["nombre"] for f in familias]
+                ids_familias = [f["id"] for f in familias]
+
+                idx = 0
+                if familia_activa_id in ids_familias:
+                    idx = ids_familias.index(familia_activa_id)
+
+                familiaSeleccionada = st.selectbox(
+                    "Tu familia activa",
+                    nombres_familias,
+                    index=idx,
+                    key="select_familia"
+                )
+
+                selected_idx = nombres_familias.index(familiaSeleccionada)
+                nueva_familia_id = ids_familias[selected_idx]
+
+                if nueva_familia_id != familia_activa_id:
+                    user_model.set_familia_activa(user_id, nueva_familia_id)
+                    st.session_state.familia_id = nueva_familia_id
+                    st.rerun()
+
+                familia_data = familias[selected_idx]
+                views.render_user_info(nombre, familia_data["nombre"], familia_data["rol_en_familia"])
+
+                st.session_state.familia_id = familia_activa_id
+            else:
+                st.info("No perteneces a ninguna familia aún.")
+                st.session_state.familia_id = ""
+
+            st.divider()
+
+            if st.button("🚪 Cerrar Sesión", use_container_width=True):
+                self.logout()
+
+        return st.session_state.get("familia_id", "")
+
+
+# -------------------------------------------------------------
+# CONTROLADOR: GESTIÓN DE FAMILIAS
+# -------------------------------------------------------------
+class FamilyController:
+    """Crear familia, unirse con código, ver miembros."""
+
+    def __init__(self, family_model: FamilyModel, user_model: UserModel):
+        self.family_model = family_model
+        self.user_model = user_model
+
+    def render_family_setup(self, user_id):
+        views.inject_auth_css()
+
+        st.markdown("""
+        <div class="auth-container">
+            <div class="auth-logo">
+                <div class="auth-logo-icon">👨‍👩‍👧‍👦</div>
+            </div>
+            <div class="auth-title">Configura tu Familia</div>
+            <div class="auth-subtitle">Crea una familia o únete a una existente</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            with st.container():
+                st.markdown("#### Crear Familia")
+                with st.form("create_family"):
+                    nombre_familia = st.text_input("Nombre de tu familia", placeholder="Ej. Familia García")
+                    if st.form_submit_button("Crear", use_container_width=True):
+                        if nombre_familia:
+                            fid = self.family_model.create(nombre_familia, user_id)
+                            st.session_state.familia_id = fid
+                            st.success(f"¡Familia '{nombre_familia}' creada!")
+                            st.rerun()
+                        else:
+                            st.error("Ingresa un nombre.")
+
+        with col2:
+            with st.container():
+                st.markdown("#### Unirse a Familia")
+                with st.form("join_family"):
+                    codigo = st.text_input("Código de invitación", placeholder="Ej. ABC123")
+                    if st.form_submit_button("Unirse", use_container_width=True):
+                        if codigo:
+                            fid, fname = self.family_model.join(user_id, codigo)
+                            if fid:
+                                st.session_state.familia_id = fid
+                                st.success(f"¡Te uniste a '{fname}'!")
+                                st.rerun()
+                            else:
+                                st.error("Código no válido.")
+                        else:
+                            st.error("Ingresa el código.")
+
+    def render_family_panel(self, familia_id, user_id):
+        familia = self.family_model.get_familia(familia_id)
+        if not familia:
+            return
+
+        st.markdown("---")
+        views.render_section_header("👥", "Mi Familia", familia.get("nombre", ""))
+
+        col_info, col_code = st.columns([2, 1])
+
+        with col_info:
+            miembros = familia.get("miembros", {})
+            if miembros:
+                for mid, mdata in miembros.items():
+                    nombre_m = mdata.get("nombre", "Sin nombre")
+                    rol_m = mdata.get("rol_en_familia", "miembro")
+                    es_admin = rol_m == "admin"
+
+                    st.markdown(f"""
+                    <div class="glass-card-sm" style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                        <div class="user-avatar" style="width:36px;height:36px;font-size:0.85rem;">
+                            {"".join([n[0].upper() for n in nombre_m.split()[:2]])}
+                        </div>
+                        <div style="flex:1;">
+                            <div style="font-weight:700;">{nombre_m}</div>
+                            <div style="font-size:0.75rem;color:var(--text-muted);">{rol_m.title()}</div>
+                        </div>
+                        {'<span class="badge badge-ambos">Admin</span>' if es_admin else ''}
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                views.render_empty_state("👤", "Sin miembros", "Aún no hay miembros en esta familia.")
+
+        with col_code:
+            codigo = familia.get("codigo_invitacion", "")
+            if codigo:
+                st.markdown(f"""
+                <div class="glass-card" style="text-align:center;">
+                    <div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px;">
+                        Código de Invitación
+                    </div>
+                    <div style="font-size:1.8rem; font-weight:900; color:var(--primary-dark); letter-spacing:0.15em;">
+                        {codigo}
+                    </div>
+                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:8px;">
+                        Comparte este código para que otros se unan
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+
+# -------------------------------------------------------------
+# CONTROLADOR: ADMINISTRACIÓN
+# -------------------------------------------------------------
+class AdminController:
+    """Panel de administrador: crear usuarios, gestionar cuentas."""
+
+    def __init__(self, user_model: UserModel):
+        self.user_model = user_model
+
+    def render_admin_panel(self):
+        from models import ADMIN_CREDENTIALS
+
+        st.markdown("---")
+        views.render_section_header("⚙️", "Panel de Administración", "Gestiona usuarios de la plataforma.")
+
+        tab_crear, tab_lista, tab_info = st.tabs([
+            "➕ Crear Usuario",
+            "👥 Usuarios Registrados",
+            "ℹ️ Cuenta Admin",
+        ])
+
+        with tab_crear:
+            self._render_create_user()
+
+        with tab_lista:
+            self._render_users_list()
+
+        with tab_info:
+            self._render_admin_info()
+
+    def _render_create_user(self):
+        st.markdown("**Crear nuevo usuario para la plataforma**")
+        st.caption("El usuario podrá iniciar sesión independientemente y crear o unirse a familias.")
+
+        with st.form("create_user_admin"):
+            nombre = st.text_input("Nombre completo", placeholder="Ej. María García")
+            email = st.text_input("Email", placeholder="maria@email.com")
+            password = st.text_input("Contraseña temporal", type="password", placeholder="Mínimo 6 caracteres")
+            rol = st.selectbox("Rol", ["miembro", "admin"])
+
+            if st.form_submit_button("Crear Usuario", use_container_width=True):
+                if not nombre or not password:
+                    st.error("Completa todos los campos.")
+                elif len(password) < 6:
+                    st.error("La contraseña debe tener al menos 6 caracteres.")
+                else:
+                    user_id, error = self.user_model.create_user_by_admin(nombre, email, password, rol)
+                    if user_id:
+                        st.success(f"✅ Usuario creado exitosamente")
+                        st.info(f"**ID de usuario:** `{user_id}`\n\n**Nombre:** {nombre}\n\n**Contraseña:** {password}")
+                    else:
+                        st.error(error)
+
+    def _render_users_list(self):
+        users = self.user_model.get_all_users()
+
+        if not users:
+            views.render_empty_state("👥", "Sin usuarios", "Aún no hay usuarios registrados.")
+            return
+
+        st.markdown(f"**{len(users)} usuarios registrados**")
+
+        for uid, udata in users.items():
+            nombre = udata.get("nombre", "Sin nombre")
+            email = udata.get("email", "—")
+            rol = udata.get("rol", "miembro")
+            is_admin_user = rol == "admin"
+            es_admin_inicial = udata.get("es_admin_inicial", False)
+
+            col_info, col_actions = st.columns([4, 1])
+
+            with col_info:
+                st.markdown(f"""
+                <div class="glass-card-sm" style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                    <div class="user-avatar" style="width:36px;height:36px;font-size:0.85rem;">
+                        {"".join([n[0].upper() for n in nombre.split()[:2]])}
+                    </div>
+                    <div style="flex:1;">
+                        <div style="font-weight:700;">{nombre}
+                            {'<span class="badge badge-ambos" style="margin-left:8px;">Admin</span>' if is_admin_user else ''}
+                            {'<span class="badge badge-proximamente" style="margin-left:8px;">Admin Inicial</span>' if es_admin_inicial else ''}
+                        </div>
+                        <div style="font-size:0.75rem;color:var(--text-muted);">📧 {email} · ID: {uid}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col_actions:
+                if not es_admin_inicial:
+                    if st.button("🗑️", key=f"del_user_{uid}", help="Eliminar usuario"):
+                        success, error = self.user_model.delete_user(uid)
+                        if success:
+                            st.success("Usuario eliminado")
+                            st.rerun()
+                        else:
+                            st.error(error)
+
+    def _render_admin_info(self):
+        from models import ADMIN_CREDENTIALS
+
+        st.markdown("**Tu cuenta de administrador**")
+        st.info(f"""
+        **Nombre:** {ADMIN_CREDENTIALS['nombre']}\n\n
+        **Email:** {ADMIN_CREDENTIALS['email']}\n\n
+        **ID:** `{ADMIN_CREDENTIALS['user_id']}`\n\n
+        **Contraseña por defecto:** `Admin123456`
+        """)
+
+        st.warning("⚠️ Cambia la contraseña después del primer inicio de sesión por seguridad.")
+
+        with st.expander("🔑 Cambiar contraseña (próximamente)"):
+            st.caption("Funcionalidad disponible en futuras versiones.")
+
+
+# -------------------------------------------------------------
+# CONTROLADOR: SIDEBAR
 # -------------------------------------------------------------
 class SidebarController:
     @staticmethod
     def render():
         with st.sidebar:
-            st.header("👤 ¿Quién eres?")
+            st.header("👤 Identificación")
             if "nombre_usuario" not in st.session_state:
                 st.session_state.nombre_usuario = ""
             st.session_state.nombre_usuario = st.text_input(
-                "Tu nombre (para saber quién registró cada dato)",
+                "Tu nombre",
                 value=st.session_state.nombre_usuario,
                 placeholder="Ej. Ana",
             )
             if not st.session_state.nombre_usuario:
-                st.info("Escribe tu nombre para poder guardar información.")
+                st.info("Escribe tu nombre para guardar información.")
             st.divider()
-            st.caption("Esta app es compartida por toda la familia. Todo lo que registres lo verán tus hermanos también.")
+            st.caption("App compartida por toda la familia.")
         return st.session_state.nombre_usuario or "Sin nombre"
 
 
@@ -51,36 +463,38 @@ class CitasController:
         self.model = cita_model
 
     def render_form_agendar(self, usuario):
-        with st.popover("➕ Agendar cita", use_container_width=True):
+        with st.popover("➕ Agendar Cita", use_container_width=True):
             with st.form("form_citas", clear_on_submit=True):
+                views.render_section_header("📅", "Nueva Cita")
                 paciente = st.selectbox("Paciente", ["Papá", "Mamá", "Ambos"])
                 especialidad = st.text_input("Especialidad / Doctor", placeholder="Ej. Cardiología - Dr. Pérez")
                 lugar = st.text_input("Hospital / Clínica", placeholder="Ej. Hospital Nacional")
                 fecha = st.date_input("Fecha", value=date.today())
                 hora = st.time_input("Hora")
-                notas = st.text_area("Notas / Indicaciones previas", placeholder="Ej. Ir en ayunas de 8 horas")
+                notas = st.text_area("Notas / Indicaciones", placeholder="Ej. Ir en ayunas de 8 horas")
 
-                if st.form_submit_button("Guardar cita", use_container_width=True):
+                if st.form_submit_button("Guardar Cita", use_container_width=True):
                     if not usuario or usuario == "Sin nombre":
-                        st.error("Primero escribe tu nombre en la barra lateral.")
+                        st.error("Escribe tu nombre en la barra lateral.")
                     elif especialidad and lugar:
                         self.model.crear(paciente, especialidad, lugar, fecha, hora, notas, usuario)
                         st.success("¡Cita registrada!")
                         st.rerun()
                     else:
-                        st.error("Completa al menos la especialidad y el lugar.")
+                        st.error("Completa especialidad y lugar.")
 
     def render_form_marcar_realizada(self, key, usuario):
-        with st.popover("✅ Marcar realizada", use_container_width=True):
+        with st.popover("✅ Marcar Realizada", use_container_width=True):
             with st.form(f"form_realizada_{key}"):
-                diagnostico = st.text_area("Diagnóstico / resultado", key=f"diag_{key}")
-                tratamiento = st.text_area("Tratamiento / medicamentos", key=f"trat_{key}")
-                recomendaciones = st.text_area("Recomendaciones del doctor", key=f"reco_{key}")
-                proxima_sugerida = st.date_input("Próxima cita sugerida (opcional)", key=f"prox_{key}", value=None)
+                views.render_section_header("📋", "Registrar Historial")
+                diagnostico = st.text_area("Diagnóstico / Resultado", key=f"diag_{key}")
+                tratamiento = st.text_area("Tratamiento / Medicamentos", key=f"trat_{key}")
+                recomendaciones = st.text_area("Recomendaciones", key=f"reco_{key}")
+                proxima_sugerida = st.date_input("Próxima cita sugerida", key=f"prox_{key}", value=None)
 
-                if st.form_submit_button("Guardar en historial", use_container_width=True):
+                if st.form_submit_button("Guardar en Historial", use_container_width=True):
                     self.model.marcar_realizada(key, diagnostico, tratamiento, recomendaciones, proxima_sugerida, usuario)
-                    st.success("Movida al historial clínico ✅")
+                    st.success("Movida al historial clínico")
                     st.rerun()
 
     @staticmethod
@@ -92,37 +506,41 @@ class CitasController:
         vista = CitaModel.filtrar_por_paciente(programadas, filtro)
 
         if not vista:
-            st.info("No hay citas programadas por ahora para este filtro.")
+            views.render_empty_state("📅", "Sin citas programadas", "Agenda la primera cita médical usando el botón de arriba.")
             return
 
         for key, cita in CitaModel.ordenar_por_fecha(vista):
             views.render_appt_card(cita)
+
+            if cita.get("notas"):
+                st.caption(f"📝 {cita.get('notas')} · Registrado por {cita.get('registrado_por', '—')}")
+
             col_a, col_b, col_c = st.columns([2, 1, 1])
             with col_a:
-                if cita.get("notas"):
-                    st.caption(f"📝 {cita.get('notas')} · Registrado por {cita.get('registrado_por','—')}")
+                pass
             with col_b:
                 self.render_form_marcar_realizada(key, usuario)
             with col_c:
-                if st.button("🗑️ Eliminar", key=f"del_cita_{key}", use_container_width=True):
+                if st.button("🗑️", key=f"del_cita_{key}", use_container_width=True):
                     self.model.eliminar(key)
                     st.rerun()
 
     def render_historial(self):
-        st.caption("Registro de cada cita ya realizada, para recordar qué se dijo antes de volver al médico.")
+        views.render_section_header("📖", "Historial Clínico", "Registro de cada cita ya realizada.")
         filtro = self.render_filtro_paciente(key="filtro_hist")
         realizadas = self.model.get_realizadas()
         vista = CitaModel.filtrar_por_paciente(realizadas, filtro)
 
         if not vista:
-            st.info("Aún no hay citas registradas en el historial para este filtro.")
+            views.render_empty_state("📖", "Historial vacío", "Las citas realizadas aparecerán aquí.")
             return
 
         for key, cita in CitaModel.ordenar_por_fecha(vista, descendente=True):
-            titulo = f"🗂️ {cita.get('fecha')} — {cita.get('paciente')}: {cita.get('especialidad')} ({cita.get('lugar')})"
+            titulo = f"🗂️ {cita.get('fecha')} — {cita.get('paciente')}: {cita.get('especialidad')}"
             with st.expander(titulo):
                 st.markdown(views.badge_paciente(cita.get('paciente')), unsafe_allow_html=True)
                 st.markdown(f"**🏥 Lugar:** {cita.get('lugar')}")
+
                 if cita.get("diagnostico"):
                     st.markdown(f"**🩺 Diagnóstico:** {cita.get('diagnostico')}")
                 if cita.get("tratamiento"):
@@ -130,9 +548,11 @@ class CitasController:
                 if cita.get("recomendaciones"):
                     st.markdown(f"**📋 Recomendaciones:** {cita.get('recomendaciones')}")
                 if cita.get("proxima_cita_sugerida"):
-                    st.markdown(f"**⏭️ Próxima cita sugerida:** {cita.get('proxima_cita_sugerida')}")
-                st.caption(f"Registrada por {cita.get('registrado_por','—')} · Historial completado por {cita.get('actualizado_por','—')}")
-                if st.button("🗑️ Eliminar de historial", key=f"del_hist_{key}"):
+                    st.markdown(f"**⏭️ Próxima sugerida:** {cita.get('proxima_cita_sugerida')}")
+
+                st.caption(f"Registrada por {cita.get('registrado_por', '—')} · Historial por {cita.get('actualizado_por', '—')}")
+
+                if st.button("🗑️ Eliminar", key=f"del_hist_{key}"):
                     self.model.eliminar(key)
                     st.rerun()
 
@@ -145,22 +565,23 @@ class ServiciosController:
         self.model = servicio_model
 
     def render_form_registrar(self, usuario):
-        with st.popover("➕ Registrar código", use_container_width=True):
+        with st.popover("➕ Registrar Código", use_container_width=True):
             with st.form("form_servicios", clear_on_submit=True):
+                views.render_section_header("💡", "Nuevo Servicio")
                 tipo = st.selectbox("Tipo de servicio", ["⚡ Luz", "💧 Agua", "🔥 Gas", "🌐 Internet", "📞 Teléfono", "Otro"])
-                empresa = st.text_input("Empresa proveedora", placeholder="Ej. Enel, Sedapal, Cálidda")
+                empresa = st.text_input("Empresa proveedora", placeholder="Ej. Enel, Sedapal")
                 codigo = st.text_input("Código de pago / Suministro", placeholder="Ej. 12345678")
                 titular = st.text_input("Titular del recibo", placeholder="Ej. Nombre de Papá o Mamá")
 
-                if st.form_submit_button("Guardar código", use_container_width=True):
+                if st.form_submit_button("Guardar Código", use_container_width=True):
                     if not usuario or usuario == "Sin nombre":
-                        st.error("Primero escribe tu nombre en la barra lateral.")
+                        st.error("Escribe tu nombre en la barra lateral.")
                     elif empresa and codigo:
                         self.model.crear(tipo, empresa, codigo, titular, usuario)
                         st.success("¡Servicio registrado!")
                         st.rerun()
                     else:
-                        st.error("Ingresa al menos la empresa y el código de pago.")
+                        st.error("Ingresa empresa y código.")
 
     @staticmethod
     def render_filtro_tipo():
@@ -175,20 +596,16 @@ class ServiciosController:
         vista = ServicioModel.filtrar_por_tipo(servicios, filtro)
 
         if not vista:
-            st.info("No hay códigos de pago registrados para este filtro.")
+            views.render_empty_state("💡", "Sin servicios registrados", "Registra el primer código de pago usando el botón de arriba.")
             return
 
         for key, servicio in vista.items():
-            col_info, col_code, col_actions = st.columns([2, 2, 1])
+            col_info, col_actions = st.columns([5, 1])
             with col_info:
                 views.render_service_info(servicio)
-            with col_code:
-                st.markdown('<div style="margin-top:8px;">', unsafe_allow_html=True)
-                st.code(servicio.get("codigo", ""), language=None)
-                st.markdown('</div>', unsafe_allow_html=True)
             with col_actions:
                 st.write("")
-                if st.button("🗑️ Eliminar", key=f"del_serv_{key}", use_container_width=True):
+                st.write("")
+                if st.button("🗑️", key=f"del_serv_{key}"):
                     self.model.eliminar(key)
                     st.rerun()
-            st.divider()

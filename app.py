@@ -1,67 +1,156 @@
 """
-app.py — Punto de entrada.
-Solo arma la página y conecta Model + View + Controller.
-No contiene reglas de negocio (eso es models.py) ni CSS (views.py)
-ni manejo de formularios (controllers.py).
+app.py — Punto de entrada de iFamily.
+Autenticación → Familias → Dashboard principal.
 """
 
 import streamlit as st
 
 import views
-from models import FirebaseService, CitaModel, ServicioModel
-from controllers import SidebarController, CitasController, ServiciosController
+from models import (
+    FirebaseService, UserModel, FamilyModel,
+    CitaModel, ServicioModel,
+)
+from controllers import (
+    AuthController, FamilyController, AdminController,
+    CitasController, ServiciosController,
+)
 
 # -------------------------------------------------------------
-# CONFIGURACIÓN DE PÁGINA Y ESTILOS
+# CONFIGURACIÓN DE PÁGINA
 # -------------------------------------------------------------
-st.set_page_config(page_title="Familia - Citas y Servicios", page_icon="🏥", layout="wide")
+st.set_page_config(
+    page_title="iFamily - Control Familiar",
+    page_icon="🏠",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 # -------------------------------------------------------------
-# PWA: hace que Android ofrezca "Instalar app" y que iOS use un
-# ícono y nombre propios al agregarla a la pantalla de inicio.
+# PWA
 # -------------------------------------------------------------
 st.markdown("""
 <link rel="manifest" href="app/static/manifest.json">
-<meta name="theme-color" content="#0F4C81">
+<meta name="theme-color" content="#00BCD4">
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="apple-touch-icon" href="app/static/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Familia">
+<meta name="apple-mobile-web-app-title" content="iFamily">
 <script>
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('app/static/service-worker.js').catch(function(err) {
-        console.log('Service worker no registrado:', err);
+        console.log('SW:', err);
     });
 }
 </script>
 """, unsafe_allow_html=True)
 
+# -------------------------------------------------------------
+# ESTILOS GLOBALES
+# -------------------------------------------------------------
 views.inject_css()
 
 # -------------------------------------------------------------
-# MODEL: conexión a Firebase e instancias de los modelos
+# MODEL: conexión a Firebase
 # -------------------------------------------------------------
 firebase = FirebaseService(st.secrets)
 if not firebase.ok:
-    st.error(f"Error al conectar con Firebase: {firebase.error}")
+    st.error(f"Error de conexión: {firebase.error}")
+    st.stop()
 
-cita_model = CitaModel(firebase)
-servicio_model = ServicioModel(firebase)
-
-# -------------------------------------------------------------
-# CONTROLLER: identificación del hermano que usa la app
-# -------------------------------------------------------------
-usuario_actual = SidebarController.render()
+user_model = UserModel(firebase)
+family_model = FamilyModel(firebase)
 
 # -------------------------------------------------------------
-# VIEW: encabezado
+# AUTH: verificar sesión
 # -------------------------------------------------------------
-st.title("🏡 Control Familiar: Papá y Mamá")
-st.caption("Citas médicas con historial clínico + códigos de pago de servicios, todo en un solo lugar para los hermanos.")
+auth = AuthController(user_model, family_model)
+
+if not auth.check_session():
+    auth.render_login()
+    st.stop()
+
+user_id = st.session_state.user_id
 
 # -------------------------------------------------------------
-# VIEW: KPIs (con datos que vienen del Model)
+# VERIFICAR ROL DEL USUARIO
+# -------------------------------------------------------------
+user_data = user_model.get_by_id(user_id)
+is_admin = user_model.is_admin(user_id)
+
+# -------------------------------------------------------------
+# ADMIN: panel completo sin necesidad de familia
+# -------------------------------------------------------------
+if is_admin:
+    admin_ctrl = AdminController(user_model)
+
+    with st.sidebar:
+        views.render_user_info(
+            user_data.get("nombre", "Admin"),
+            "Panel Admin",
+            "administrador"
+        )
+        st.divider()
+
+        if st.button("🚪 Cerrar Sesión", use_container_width=True):
+            auth.logout()
+
+    st.markdown(f"""
+    <div style="margin-bottom:8px;">
+        <h1 style="margin:0; font-size:1.6rem;">⚙️ Panel de Administración</h1>
+        <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:0.9rem;">
+            Bienvenido, <strong>{user_data.get('nombre', 'Admin')}</strong> — Gestiona usuarios de iFamily
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    admin_ctrl.render_admin_panel()
+    st.stop()
+
+# -------------------------------------------------------------
+# USUARIO NORMAL: flujo de familia
+# -------------------------------------------------------------
+familia_id = user_model.get_familia_activa(user_id)
+
+if not familia_id:
+    family_ctrl = FamilyController(family_model, user_model)
+    family_ctrl.render_family_setup(user_id)
+    st.stop()
+
+# -------------------------------------------------------------
+# SIDEBAR: sesión y selector de familia
+# -------------------------------------------------------------
+familia_id = auth.render_sidebar_session(user_model, family_model)
+
+if not familia_id:
+    family_ctrl = FamilyController(family_model, user_model)
+    family_ctrl.render_family_setup(user_id)
+    st.stop()
+
+# -------------------------------------------------------------
+# MODELS: instanciar con familia activa
+# -------------------------------------------------------------
+cita_model = CitaModel(firebase, familia_id)
+servicio_model = ServicioModel(firebase, familia_id)
+
+# -------------------------------------------------------------
+# HEADER PRINCIPAL
+# -------------------------------------------------------------
+nombre_usuario = user_data.get("nombre", "Sin nombre")
+familia_data = family_model.get_familia(familia_id)
+nombre_familia = familia_data.get("nombre", "Mi Familia")
+
+st.markdown(f"""
+<div style="margin-bottom:8px;">
+    <h1 style="margin:0; font-size:1.6rem;">🏠 {nombre_familia}</h1>
+    <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:0.9rem;">
+        Bienvenido, <strong>{nombre_usuario}</strong> — Control familiar inteligente
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# -------------------------------------------------------------
+# KPIs
 # -------------------------------------------------------------
 _, proxima_cita = cita_model.proxima_cita()
 views.render_kpis(
@@ -73,31 +162,55 @@ views.render_kpis(
 st.write("")
 
 # -------------------------------------------------------------
-# CONTROLLERS: pestañas principales
+# TABS PRINCIPALES
 # -------------------------------------------------------------
+tab_citas, tab_historial, tab_servicios, tab_familia = st.tabs([
+    "📅 Citas Médicas",
+    "📖 Historial Clínico",
+    "💡 Servicios Públicos",
+    "👥 Mi Familia",
+])
+
 citas_controller = CitasController(cita_model)
 servicios_controller = ServiciosController(servicio_model)
+family_controller = FamilyController(family_model, user_model)
 
-tab1, tab2 = st.tabs(["📅 Citas Médicas", "💡 Servicios Públicos"])
+# -------------------------------------------------------------
+# TAB: CITAS MÉDICAS
+# -------------------------------------------------------------
+with tab_citas:
+    views.render_section_header("📅", "Citas Médicas Próximas", "Gestiona las citas de Papá y Mamá.")
 
-with tab1:
-    sub_prog, sub_hist = st.tabs(["🗓️ Próximas citas", "📖 Historial clínico"])
+    col_filter, col_action = st.columns([3, 1])
+    with col_filter:
+        filtro_prog = CitasController.render_filtro_paciente()
+    with col_action:
+        citas_controller.render_form_agendar(nombre_usuario)
 
-    with sub_prog:
-        top_left, top_right = st.columns([3, 1])
-        with top_left:
-            filtro_prog = CitasController.render_filtro_paciente()
-        with top_right:
-            citas_controller.render_form_agendar(usuario_actual)
-        citas_controller.render_lista_programadas(usuario_actual, filtro_prog)
+    citas_controller.render_lista_programadas(nombre_usuario, filtro_prog)
 
-    with sub_hist:
-        citas_controller.render_historial()
+# -------------------------------------------------------------
+# TAB: HISTORIAL CLÍNICO
+# -------------------------------------------------------------
+with tab_historial:
+    citas_controller.render_historial()
 
-with tab2:
-    top_left, top_right = st.columns([3, 1])
-    with top_left:
+# -------------------------------------------------------------
+# TAB: SERVICIOS PÚBLICOS
+# -------------------------------------------------------------
+with tab_servicios:
+    views.render_section_header("💡", "Servicios Públicos y Facturas", "Códigos de pago de luz, agua, gas e internet.")
+
+    col_filter, col_action = st.columns([3, 1])
+    with col_filter:
         filtro_tipo = ServiciosController.render_filtro_tipo()
-    with top_right:
-        servicios_controller.render_form_registrar(usuario_actual)
+    with col_action:
+        servicios_controller.render_form_registrar(nombre_usuario)
+
     servicios_controller.render_lista(filtro_tipo)
+
+# -------------------------------------------------------------
+# TAB: MI FAMILIA
+# -------------------------------------------------------------
+with tab_familia:
+    family_controller.render_family_panel(familia_id, user_id)
