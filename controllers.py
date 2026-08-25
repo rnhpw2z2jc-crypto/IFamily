@@ -284,38 +284,20 @@ class FamilyController:
                     nombre_m = mdata.get("nombre", "Sin nombre")
                     rol_m = mdata.get("rol_en_familia", "miembro")
                     es_admin = rol_m == "admin"
+                    iniciales = "".join([n[0].upper() for n in nombre_m.split()[:2]]) if nombre_m else "?"
 
-                    st.markdown(f"""
-                    <div class="glass-card-sm" style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
-                        <div class="user-avatar" style="width:36px;height:36px;font-size:0.85rem;">
-                            {"".join([n[0].upper() for n in nombre_m.split()[:2]])}
-                        </div>
-                        <div style="flex:1;">
-                            <div style="font-weight:700;">{nombre_m}</div>
-                            <div style="font-size:0.75rem;color:var(--text-muted);">{rol_m.title()}</div>
-                        </div>
-                        {'<span class="badge badge-ambos">Admin</span>' if es_admin else ''}
-                    </div>
-                    """, unsafe_allow_html=True)
+                    badge = " 🔷 Admin" if es_admin else ""
+                    st.markdown(f"**{iniciales}** {nombre_m}{badge}")
+                    st.caption(f"{rol_m.title()}")
             else:
                 views.render_empty_state("👤", "Sin miembros", "Aún no hay miembros en esta familia.")
 
         with col_code:
             codigo = familia.get("codigo_invitacion", "")
             if codigo:
-                st.markdown(f"""
-                <div class="glass-card" style="text-align:center;">
-                    <div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:8px;">
-                        Código de Invitación
-                    </div>
-                    <div style="font-size:1.8rem; font-weight:900; color:var(--primary-dark); letter-spacing:0.15em;">
-                        {codigo}
-                    </div>
-                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:8px;">
-                        Comparte este código para que otros se unan
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown("**Código de Invitación**")
+                st.markdown(f"### `{codigo}`")
+                st.caption("Comparte este código para que otros se unan")
 
 
 # -------------------------------------------------------------
@@ -386,24 +368,19 @@ class AdminController:
             rol = udata.get("rol", "miembro")
             is_admin_user = rol == "admin"
             es_admin_inicial = udata.get("es_admin_inicial", False)
+            iniciales = "".join([n[0].upper() for n in nombre.split()[:2]]) if nombre else "?"
+
+            badges = ""
+            if is_admin_user:
+                badges += " 🔷 Admin"
+            if es_admin_inicial:
+                badges += " ⭐ Inicial"
 
             col_info, col_actions = st.columns([4, 1])
 
             with col_info:
-                st.markdown(f"""
-                <div class="glass-card-sm" style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
-                    <div class="user-avatar" style="width:36px;height:36px;font-size:0.85rem;">
-                        {"".join([n[0].upper() for n in nombre.split()[:2]])}
-                    </div>
-                    <div style="flex:1;">
-                        <div style="font-weight:700;">{nombre}
-                            {'<span class="badge badge-ambos" style="margin-left:8px;">Admin</span>' if is_admin_user else ''}
-                            {'<span class="badge badge-proximamente" style="margin-left:8px;">Admin Inicial</span>' if es_admin_inicial else ''}
-                        </div>
-                        <div style="font-size:0.75rem;color:var(--text-muted);">📧 {email} · ID: {uid}</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f"**{iniciales}** {nombre}{badges}")
+                st.caption(f"📧 {email} · ID: `{uid}`")
 
             with col_actions:
                 if not es_admin_inicial:
@@ -496,15 +473,8 @@ class PersonasController:
 
             col_info, col_del = st.columns([5, 1])
             with col_info:
-                st.markdown(f"""
-                <div class="glass-card-sm" style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
-                    <div class="user-avatar" style="width:36px;height:36px;font-size:0.85rem; background:var(--primary);">{iniciales}</div>
-                    <div style="flex:1;">
-                        <div style="font-weight:700;">{nombre_p}</div>
-                        <div style="font-size:0.75rem;color:var(--text-muted);">{relacion_p}</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(f"**{iniciales}** {nombre_p}")
+                st.caption(f"{relacion_p}")
             with col_del:
                 st.write("")
                 st.write("")
