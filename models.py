@@ -8,25 +8,61 @@ familias por usuario y sistema de roles (admin / miembro).
 import hashlib
 import json
 import os
+import secrets as _secrets_mod
 import tempfile
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
-import base64 as _b64
 import firebase_admin
 from firebase_admin import credentials, db
 
+try:
+    import bcrypt as _bcrypt
+except ImportError:
+    _bcrypt = None
+
 
 # -------------------------------------------------------------
-# CREDENCIALES ADMIN PREDEFINIDAS
+# HELPERS: HASHING SEGURO
 # -------------------------------------------------------------
-ADMIN_CREDENTIALS = {
-    "user_id": "admin_ifamily_001",
-    "nombre": "Administrador iFamily",
-    "email": "admin@ifamily.com",
-    "password_hash": hashlib.sha256("Admin123456".encode()).hexdigest(),
-    "rol": "admin",
-}
+def _hash_password(password: str) -> str:
+    if _bcrypt:
+        return _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
+    salt = _secrets_mod.token_hex(16)
+    return f"sha256${salt}${hashlib.sha256((salt + password).encode()).hexdigest()}"
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    if _bcrypt and stored.startswith("$2"):
+        return _bcrypt.checkpw(password.encode(), stored.encode())
+    if stored.startswith("sha256$"):
+        parts = stored.split("$")
+        if len(parts) == 3:
+            salt, expected = parts[1], parts[2]
+            return hashlib.sha256((salt + password).encode()).hexdigest() == expected
+    return hashlib.sha256(password.encode()).hexdigest() == stored
+
+
+def _sanitize(text: str) -> str:
+    """Escapa HTML para prevenir XSS."""
+    import html as _html
+    return _html.escape(str(text)) if text else ""
+
+
+# -------------------------------------------------------------
+# CREDENCIALES ADMIN (desde secrets)
+# -------------------------------------------------------------
+def get_admin_credentials(secrets):
+    """Lee las credenciales admin desde st.secrets."""
+    if not secrets or not hasattr(secrets, "get"):
+        return {}
+    return {
+        "user_id": secrets.get("admin_user_id", "admin_ifamily_001"),
+        "nombre": secrets.get("admin_nombre", "Administrador iFamily"),
+        "email": secrets.get("admin_email", "admin@ifamily.com"),
+        "password_hash": _hash_password(secrets.get("admin_password", "Admin123456")),
+        "rol": "admin",
+    }
 
 
 # -------------------------------------------------------------
@@ -43,23 +79,38 @@ class FirebaseService:
     def _init(self, secrets):
         if not firebase_admin._apps:
             try:
-                _a = "eyJ0eXBlIjoic2VydmljZV9hY2NvdW50IiwicHJvamVjdF9pZCI6ImlmYW1pbHktZmE4YjciLCJwcml2YXRlX2tleV9pZCI6ImE5ZjRhMTcxNGI3OTI5MmFlYTFkNjNmYzUyZTNkYTcwOGQ5Y2Y1YWMiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuTUlJRXZRSUJBREFOQmdrcWhraUc5dzBCQVFFRkFBU0NCS2N3Z2dTakFnRUFBb0lCQVFDajQrRHVnVlBpRW82dVxuRDZuUmVHSG56QjF4Z3BKWEZlaFZJaEIzMmYybnAyUkhGZ0FMekRuVXhEdFAycXphWUgwU21VajhnRkdjdGNnL1xudVA3b3Z5UWxYR1hicjA3TndRWWhPREpOWVA5b2M4UzJzaWtLMzFPTUtCTDhjYU9nazRqYzRyM3JtRUMwZUxyWFxuckpLOXN4c1ptT212ZGUxd3k5K2daM2E4NVlBZ0p4K3ViVkJqUkRaMVlZWWZJZnQ5QjJrQ0VyWkJxaDA0QVMwYlxuMjF5QjZNSXdCVG0vc3NVSG81N25UVmJKaVFMZTlYV3NycHF6K3dRWHBjSUgwQ1YweVV4ZExjWUFRaFR4TXNTZVxuNTZWalZ1N2Faa1kveDdXL0VsUUZlTTh0NnAyUmR3YUc1dlMwUTArcDVFbXh0UVA2WTA3cHV0amJZWms0ZnVyYVxuTTl0amVNb0ZBZ01CQUFFQ2dnRUFBdVF4UGc5aXdmZ1Rhbm01alp3bmN5elBvWmoyRFl6V1VySy9wdW81YXdxUlxuNTlTVWRnNkppVG5xZWEydTQyMzVXM3UyOTBoTnNYQUN0OE5lWitzMnlxNDdzODRqZDBhSFM2Z0dYZ1ZCSXlTd1xuU3JDUDBtQmFzbndacHNydUt5aElVZXk3QU9UNjBoMXFUTHpJd1J2ZnZwZnZyS05KZWkwSTVadnJaVWkvaUNQeFxuVlNkaDJMQ3VKMVd4T1MyR3JqdUpmdTM2dnlGaHo1OVc3UDlFeHlsS1dKcmVrUDVwdUtSSXJlVjJtTDJmVis4NlxuQlpDSG9xRk1IVkUvazNMRU9nZy9zT0tlQzNPZUxXcFhmWjB1UjZ4SHEyVXJkNklhMCtXcUNiSDVDVHhYaVBOdFxuVDlwenh6SzF4aWxTWmtxeHl4bkR5UEdxS1pUOXZvSC9yZ0Y5YlBIS01RS0JnUURQTXlUcnVqL25QNHpBR1paNVxuYVNqWkYxMVFib3dTajN1a01oRTZkeEZuWVExRzY4S1M1cFZYR0E4enQvYWVzZzE1S2tWNlRMVzJzalhRZS9jcVxua0NRV09jYm15SnZWRmRMa293Ty9XOW9idk1WcEJtdHFLU21MNlY4aVVIWUhDWkpUSG9HVWhwN3c1eGJmRFVOTlxuSzBZZDhCUkw1MHRuU09LNm0vS282RWdYU1FLQmdRREtmVzc3YlFveUUwOGpiRkhrcU5UbFg1Nmw3a3A2dVRpQlxuR3VacHIwbTJac01lbm1TSUx1"
-                _b = "Q0pCZUpZNitvMXh1WVJEVlhkN2JMYzhOektrTmt4d01neFVRNGgvVkdZRFB1QVxuUjhmbHh1YXB1R1pFam5ZMWlmQmpLVDJHUXZQWEVpaHRLSFhIVHFxdncxV3VxM29YMVR6SW9NUEU3cFNrNVllT1xuTzA2ZnB1Y3czUUtCZ0NmeGVocWZheFpQWC9qZ2RldXQ1QndGcncyRVlpaHAxTElRbk5XaWdvNWxYVVBneXorNlxuaCt1a1RibndxdkJvN3NQKzdDbnBnOVpXZ0oxU2FKR2grL0wwN0cwdEd5MTI2WkwrQWdqdjBob3F4L3U1S3hmcVxuRzRKSFdQbXFmVFphR0FWQ0NrVHh0czVHSGxpZG0rM1NlOC9scW1QL2tMKzJnMDdxSlZ0K2UvZFJBb0dCQUlOZ1xubU5aR2Evd0xiU2hGaW1pNlpjOGdtQlYrb3hJM0JJTTNpZEYrS214UEJqL2ljc1dzN0gvYXNuNFJLdGVUWWdna1xuUjljQzl5N0VrK3hWeUtXd04vTlBiTVQrejZiQW5aa2dlWUVLNlBPck1hYy9hMURYVzRGcTY0RW1CWUZBUmJ4MVxuS04yVW04Z0lDNXFWcFZTN1JJSERWT0Y4RGpOaXZPMjZhd3ZJeFcxOUFvR0FPN0JES1Mwd2lDMUE2YjNhYVpoM1xuWnJocGNBalZQMW1KTEZiZGhTM1FQV20zVzV6ejRuVDc0eVdNN1RTdFkraXlrVmE3TVd5TkdBSTF2RjBuWjB1YlxuUUFmckxiNEljdEVKM0MwLytBM2l1K3FKbFFXeFBSNW5aZkUvYWV3NDJralgvdXJXSmtaR2ZXM2xXRk84THk0Y1xuMjZMVXN2V1o4eWpMSlJaak0xM1UvYnc9XG4tLS0tLUVORCBQUklWQVRFIEtFWS0tLS0tXG4iLCJjbGllbnRfZW1haWwiOiJmaXJlYmFzZS1hZG1pbnNkay1mYnN2Y0BpZmFtaWx5LWZhOGI3LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwiY2xpZW50X2lkIjoiMTEwMzAyMzE0MDQ1NDgzODc4MTE3IiwiYXV0aF91cmkiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20vby9vYXV0aDIvYXV0aCIsInRva2VuX3VyaSI6Imh0dHBzOi8vb2F1dGgyLmdvb2dsZWFwaXMuY29tL3Rva2VuIiwiYXV0aF9wcm92aWRlcl94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vb2F1dGgyL3YxL2NlcnRzIiwiY2xpZW50X3g1MDlfY2VydF91cmwiOiJodHRwczovL3d3dy5nb29nbGVhcGlzLmNvbS9yb2JvdC92MS9tZXRhZGF0YS94NTA5L2ZpcmViYXNlLWFkbWluc2RrLWZic3ZjJTQwaWZhbWlseS1mYThiNy5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIsInVuaXZlcnNlX2RvbWFpbiI6Imdvb2dsZWFwaXMuY29tIn0="
-
-                key_dict = json.loads(_b64.b64decode(_a + _b).decode("utf-8"))
-
+                key_dict = None
+                if secrets and hasattr(secrets, "get"):
+                    firebase_json_str = secrets.get("firebase_json", "")
+                    if firebase_json_str:
+                        key_dict = json.loads(firebase_json_str)
+                if not key_dict:
+                    for attr in ("firebase_json", "FIREBASE_JSON", "firebase_key_json"):
+                        if secrets and hasattr(secrets, "get"):
+                            val = secrets.get(attr, "")
+                            if val:
+                                key_dict = json.loads(val) if isinstance(val, str) else val
+                                break
+                if not key_dict:
+                    _a = secrets.get("_firebase_a", "") if secrets and hasattr(secrets, "get") else ""
+                    _b = secrets.get("_firebase_b", "") if secrets and hasattr(secrets, "get") else ""
+                    if _a and _b:
+                        import base64
+                        key_dict = json.loads(base64.b64decode(_a + _b).decode("utf-8"))
+                if not key_dict:
+                    self.error = "Firebase credentials not found in secrets. Add firebase_json to .streamlit/secrets.toml"
+                    self.ok = False
+                    return
                 tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".json", mode="w")
                 json.dump(key_dict, tmp)
                 tmp.close()
                 cred = credentials.Certificate(tmp.name)
                 os.unlink(tmp.name)
-
-                firebase_db_url = "https://ifamily-fa8b7-default-rtdb.firebaseio.com/"
-
+                firebase_db_url = key_dict.get("databaseURL", "https://ifamily-fa8b7-default-rtdb.firebaseio.com/")
                 firebase_admin.initialize_app(cred, {"databaseURL": firebase_db_url})
                 self.ok = True
             except Exception as e:
-                self.error = str(e)
+                self.error = f"Error de conexión: {str(e)[:120]}"
                 self.ok = False
         else:
             self.ok = True
@@ -151,7 +202,7 @@ class UserModel:
             "email": email,
             "photo_url": "",
             "rol": rol,
-            "password_hash": hashlib.sha256(password.encode()).hexdigest(),
+            "password_hash": _hash_password(password),
             "familias": {},
             "familia_activa": "",
             "created_at": now,
@@ -163,7 +214,7 @@ class UserModel:
 
     def delete_user(self, user_id):
         """Elimina un usuario (solo admin)."""
-        if user_id == ADMIN_CREDENTIALS["user_id"]:
+        if user_id == "admin_ifamily_001":
             return False, "No se puede eliminar la cuenta admin"
         self.ref.child(user_id).delete()
         return True, None
@@ -171,20 +222,23 @@ class UserModel:
     def reset_password(self, user_id, new_password):
         """Resetea la contraseña de un usuario (solo admin)."""
         self.ref.child(user_id).update({
-            "password_hash": hashlib.sha256(new_password.encode()).hexdigest()
+            "password_hash": _hash_password(new_password)
         })
         return True, None
 
-    def init_admin_account(self):
+    def init_admin_account(self, secrets):
         """Crea la cuenta admin si no existe."""
-        existing = self.get_by_id(ADMIN_CREDENTIALS["user_id"])
+        admin = get_admin_credentials(secrets)
+        if not admin:
+            return
+        existing = self.get_by_id(admin["user_id"])
         if not existing:
-            self.ref.child(ADMIN_CREDENTIALS["user_id"]).set({
-                "user_id": ADMIN_CREDENTIALS["user_id"],
-                "nombre": ADMIN_CREDENTIALS["nombre"],
-                "email": ADMIN_CREDENTIALS["email"],
+            self.ref.child(admin["user_id"]).set({
+                "user_id": admin["user_id"],
+                "nombre": admin["nombre"],
+                "email": admin["email"],
                 "rol": "admin",
-                "password_hash": ADMIN_CREDENTIALS["password_hash"],
+                "password_hash": admin["password_hash"],
                 "familias": {},
                 "familia_activa": "",
                 "created_at": str(datetime.now()),
@@ -207,6 +261,7 @@ class FamilyModel:
     def create(self, nombre, creador_id):
         import uuid
         familia_id = str(uuid.uuid4())[:8]
+        codigo = _secrets_mod.token_urlsafe(8)[:12].upper()
         now = str(datetime.now())
 
         self.ref.child(familia_id).set({
@@ -221,7 +276,7 @@ class FamilyModel:
                     "unido_en": now,
                 }
             },
-            "codigo_invitacion": familia_id.upper(),
+            "codigo_invitacion": codigo,
         })
 
         self.user_model.add_familia_to_user(creador_id, familia_id, nombre, "admin")

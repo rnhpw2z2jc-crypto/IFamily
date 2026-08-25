@@ -28,6 +28,10 @@ desktop.ini
 
 # Streamlit
 .streamlit/secrets.toml
+Secrets.toml
+secrets.toml
+*.toml
+!.streamlit/config.toml
 
 # Firebase credentials
 firebase_key.json

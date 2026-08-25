@@ -1,5 +1,9 @@
 [server]
+enableCORS = false
+enableXsrfProtection = true
 enableStaticServing = true
+maxUploadSize = 1
+maxMessageSize = 50
 
 [theme]
 primaryColor = "#0F4C81"

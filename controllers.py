@@ -5,15 +5,24 @@ Maneja autenticación, familias, formularios y eventos.
 Conecta directamente con el backend (models.py).
 """
 
-from datetime import date
+from datetime import date, datetime, timedelta
+import time
 
 import streamlit as st
 
 from models import (
     FirebaseService, UserModel, FamilyModel,
     CitaModel, ServicioModel, PersonaModel,
+    get_admin_credentials, _hash_password, _verify_password, _sanitize,
 )
 import views
+
+# -------------------------------------------------------------
+# CONSTANTES DE SEGURIDAD
+# -------------------------------------------------------------
+MAX_LOGIN_ATTEMPTS = 5
+LOGIN_LOCKOUT_SECONDS = 300
+SESSION_TIMEOUT_SECONDS = 3600
 
 
 # -------------------------------------------------------------
@@ -53,24 +62,43 @@ class AuthController:
                 self._render_register_form()
 
     def _render_login_form(self):
+        if "login_attempts" not in st.session_state:
+            st.session_state.login_attempts = 0
+        if "login_lockout_until" not in st.session_state:
+            st.session_state.login_lockout_until = 0
+
+        if time.time() < st.session_state.login_lockout_until:
+            remaining = int(st.session_state.login_lockout_until - time.time())
+            st.error(f"Demasiados intentos fallidos. Espera {remaining} segundos.")
+            return
+
         with st.form("login_form"):
             st.markdown("**Iniciar Sesión**")
-            nombre = st.text_input("Tu nombre", placeholder="Ej. Carlos")
+            email = st.text_input("Email", placeholder="tu@email.com")
             password = st.text_input("Contraseña", type="password", placeholder="Mínimo 6 caracteres")
 
             if st.form_submit_button("Iniciar Sesión", use_container_width=True):
-                if not nombre or not password:
-                    st.error("Completa tu nombre y contraseña.")
+                if not email or not password:
+                    st.error("Completa tu email y contraseña.")
                 elif len(password) < 6:
                     st.error("La contraseña debe tener al menos 6 caracteres.")
                 else:
-                    user_id = self._login(nombre, password)
+                    user_id = self._login(email, password)
                     if user_id:
+                        st.session_state.login_attempts = 0
                         st.session_state.user_id = user_id
-                        st.session_state.nombre_usuario = nombre
+                        user_data = self.user_model.get_by_id(user_id)
+                        st.session_state.nombre_usuario = user_data.get("nombre", "")
+                        st.session_state.login_time = time.time()
+                        self.user_model.ref.child(user_id).update({"last_login": str(datetime.now())})
                         st.rerun()
                     else:
-                        st.error("Credenciales incorrectas. Verifica tu nombre y contraseña.")
+                        st.session_state.login_attempts += 1
+                        if st.session_state.login_attempts >= MAX_LOGIN_ATTEMPTS:
+                            st.session_state.login_lockout_until = time.time() + LOGIN_LOCKOUT_SECONDS
+                            st.error("Demasiados intentos. Cuenta bloqueada temporalmente.")
+                        else:
+                            st.error("Credenciales incorrectas. Verifica tu email y contraseña.")
 
         st.markdown("""
         <div class="auth-link">
@@ -117,19 +145,17 @@ class AuthController:
             st.session_state.auth_mode = "login"
             st.rerun()
 
-    def _login(self, nombre, password):
+    def _login(self, email, password):
         """Login: verifica admin predefinido primero, luego usuarios de Firebase."""
-        from models import ADMIN_CREDENTIALS
-
-        if (nombre.lower() == ADMIN_CREDENTIALS["nombre"].lower() and
-                self._hash_password(password) == ADMIN_CREDENTIALS["password_hash"]):
-            self.user_model.init_admin_account()
-            return ADMIN_CREDENTIALS["user_id"]
+        admin = get_admin_credentials(st.secrets)
+        if admin and email.lower() == admin["email"].lower() and _verify_password(password, admin["password_hash"]):
+            self.user_model.init_admin_account(st.secrets)
+            return admin["user_id"]
 
         users = self.user_model.get_all_users()
         for uid, udata in users.items():
-            if (udata.get("nombre", "").lower() == nombre.lower() and
-                    udata.get("password_hash", "") == self._hash_password(password)):
+            if (udata.get("email", "").lower() == email.lower() and
+                    _verify_password(password, udata.get("password_hash", ""))):
                 return uid
         return None
 
@@ -145,20 +171,21 @@ class AuthController:
 
         self.user_model.create_or_update(user_id, nombre, email)
         self.user_model.ref.child(user_id).update({
-            "password_hash": self._hash_password(password)
+            "password_hash": _hash_password(password)
         })
         return user_id
 
-    def _hash_password(self, password):
-        """Hash simple para demo. En producción usar bcrypt."""
-        import hashlib
-        return hashlib.sha256(password.encode()).hexdigest()
-
     def check_session(self):
-        return "user_id" in st.session_state and st.session_state.user_id
+        if "user_id" not in st.session_state or not st.session_state.user_id:
+            return False
+        login_time = st.session_state.get("login_time", 0)
+        if login_time and (time.time() - login_time) > SESSION_TIMEOUT_SECONDS:
+            self.logout()
+            return False
+        return True
 
     def logout(self):
-        for key in ["user_id", "nombre_usuario", "familia_activa", "familia_id"]:
+        for key in ["user_id", "nombre_usuario", "familia_activa", "familia_id", "login_time"]:
             st.session_state.pop(key, None)
         st.rerun()
 
@@ -310,8 +337,6 @@ class AdminController:
         self.user_model = user_model
 
     def render_admin_panel(self):
-        from models import ADMIN_CREDENTIALS
-
         st.markdown("---")
         views.render_section_header("⚙️", "Panel de Administración", "Gestiona usuarios de la plataforma.")
 
@@ -348,8 +373,7 @@ class AdminController:
                 else:
                     user_id, error = self.user_model.create_user_by_admin(nombre, email, password, rol)
                     if user_id:
-                        st.success(f"✅ Usuario creado exitosamente")
-                        st.info(f"**ID de usuario:** `{user_id}`\n\n**Nombre:** {nombre}\n\n**Contraseña:** {password}")
+                        st.success(f"✅ Usuario creado exitosamente\n\n**ID de usuario:** `{user_id}`\n\n**Email:** {email}")
                     else:
                         st.error(error)
 
@@ -393,17 +417,19 @@ class AdminController:
                             st.error(error)
 
     def _render_admin_info(self):
-        from models import ADMIN_CREDENTIALS
+        admin = get_admin_credentials(st.secrets)
 
         st.markdown("**Tu cuenta de administrador**")
-        st.info(f"""
-        **Nombre:** {ADMIN_CREDENTIALS['nombre']}\n\n
-        **Email:** {ADMIN_CREDENTIALS['email']}\n\n
-        **ID:** `{ADMIN_CREDENTIALS['user_id']}`\n\n
-        **Contraseña por defecto:** `Admin123456`
-        """)
+        if admin:
+            st.info(f"""
+            **Nombre:** {admin['nombre']}\n\n
+            **Email:** {admin['email']}\n\n
+            **ID:** `{admin['user_id']}`
+            """)
+        else:
+            st.warning("No se encontraron credenciales de admin en los secrets.")
 
-        st.warning("⚠️ Cambia la contraseña después del primer inicio de sesión por seguridad.")
+        st.warning("⚠️ Las credenciales admin están configuradas en los secrets de la app.")
 
         with st.expander("🔑 Cambiar contraseña (próximamente)"):
             st.caption("Funcionalidad disponible en futuras versiones.")

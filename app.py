@@ -8,7 +8,7 @@ import streamlit as st
 import views
 from models import (
     FirebaseService, UserModel, FamilyModel,
-    CitaModel, ServicioModel, PersonaModel,
+    CitaModel, ServicioModel, PersonaModel, _sanitize,
 )
 from controllers import (
     AuthController, FamilyController, AdminController,
@@ -99,7 +99,7 @@ if is_admin:
     <div style="margin-bottom:8px;">
         <h1 style="margin:0; font-size:1.6rem;">⚙️ Panel de Administración</h1>
         <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:0.9rem;">
-            Bienvenido, <strong>{user_data.get('nombre', 'Admin')}</strong> — Gestiona usuarios de iFamily
+            Bienvenido, <strong>{_sanitize(user_data.get('nombre', 'Admin'))}</strong> — Gestiona usuarios de iFamily
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -117,6 +117,11 @@ if not familia_id:
     family_ctrl.render_family_setup(user_id)
     st.stop()
 
+# IDOR protection: verify user belongs to the active family
+if not family_model.is_miembro(familia_id, user_id):
+    st.error("No tienes acceso a esta familia.")
+    st.stop()
+
 # -------------------------------------------------------------
 # SIDEBAR: sesión y selector de familia
 # -------------------------------------------------------------
@@ -125,6 +130,11 @@ familia_id = auth.render_sidebar_session(user_model, family_model)
 if not familia_id:
     family_ctrl = FamilyController(family_model, user_model)
     family_ctrl.render_family_setup(user_id)
+    st.stop()
+
+# IDOR protection: verify user belongs to the active family
+if not family_model.is_miembro(familia_id, user_id):
+    st.error("No tienes acceso a esta familia.")
     st.stop()
 
 # -------------------------------------------------------------
@@ -143,9 +153,9 @@ nombre_familia = familia_data.get("nombre", "Mi Familia")
 
 st.markdown(f"""
 <div style="margin-bottom:8px;">
-    <h1 style="margin:0; font-size:1.6rem;">🏠 {nombre_familia}</h1>
+    <h1 style="margin:0; font-size:1.6rem;">🏠 {_sanitize(nombre_familia)}</h1>
     <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:0.9rem;">
-        Bienvenido, <strong>{nombre_usuario}</strong> — Control familiar inteligente
+        Bienvenido, <strong>{_sanitize(nombre_usuario)}</strong> — Control familiar inteligente
     </p>
 </div>
 """, unsafe_allow_html=True)

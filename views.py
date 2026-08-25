@@ -7,7 +7,7 @@ CSS, tarjetas, badges, empty states, skeletons.
 
 import streamlit as st
 
-from models import CitaModel, ServicioModel
+from models import CitaModel, ServicioModel, _sanitize
 
 
 # -------------------------------------------------------------
@@ -739,14 +739,14 @@ def inject_auth_css():
 # BADGES
 # -------------------------------------------------------------
 def badge_paciente(paciente):
-    return f'<span class="badge badge-persona">{paciente}</span>'
+    return f'<span class="badge badge-persona">{_sanitize(paciente)}</span>'
 
 
 def badge_estado_cita(fecha_str):
     texto, clase = CitaModel.estado_visual(fecha_str)
     if not texto:
         return ""
-    return f'<span class="badge {clase}">{texto}</span>'
+    return f'<span class="badge {clase}">{_sanitize(texto)}</span>'
 
 
 # -------------------------------------------------------------
@@ -755,9 +755,9 @@ def badge_estado_cita(fecha_str):
 def render_empty_state(icon, title, description):
     st.markdown(f"""
     <div class="empty-state">
-        <div class="empty-state-icon">{icon}</div>
-        <div class="empty-state-title">{title}</div>
-        <div class="empty-state-desc">{description}</div>
+        <div class="empty-state-icon">{_sanitize(icon)}</div>
+        <div class="empty-state-title">{_sanitize(title)}</div>
+        <div class="empty-state-desc">{_sanitize(description)}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -783,8 +783,8 @@ def render_kpis(total_citas_programadas, proxima_cita, total_servicios):
     proxima_txt = "Sin citas"
     proxima_sub = "Programa la primera cita"
     if proxima_cita is not None:
-        proxima_txt = f"{proxima_cita.get('fecha')}"
-        proxima_sub = f"{proxima_cita.get('paciente')} · {proxima_cita.get('hora', '')}"
+        proxima_txt = f"{_sanitize(proxima_cita.get('fecha'))}"
+        proxima_sub = f"{_sanitize(proxima_cita.get('paciente'))} · {_sanitize(proxima_cita.get('hora', ''))}"
 
     k1, k2, k3 = st.columns(3)
     with k1:
@@ -821,8 +821,8 @@ def render_appt_card(cita):
     <div class="appt-card">
         <div>
             {badge_paciente(cita.get('paciente'))}{badge_estado_cita(cita.get('fecha'))}
-            <div class="appt-title">{cita.get('especialidad')}</div>
-            <div class="appt-meta">🏥 {cita.get('lugar')} · 📆 {cita.get('fecha')} {cita.get('hora', '')}</div>
+            <div class="appt-title">{_sanitize(cita.get('especialidad'))}</div>
+            <div class="appt-meta">🏥 {_sanitize(cita.get('lugar'))} · 📆 {_sanitize(cita.get('fecha'))} {_sanitize(cita.get('hora', ''))}</div>
         </div>
     </div>""", unsafe_allow_html=True)
 
@@ -833,20 +833,21 @@ def render_appt_card(cita):
 def render_service_info(servicio):
     icono = ServicioModel.icono(servicio.get("tipo"))
     codigo = servicio.get("codigo", "—")
+    safe_codigo = _sanitize(codigo).replace("'", "\\'").replace('"', '&quot;')
     st.markdown(f"""
     <div class="service-card">
         <div style="display:flex; align-items:center; gap:14px;">
-            <div class="service-icon">{icono}</div>
+            <div class="service-icon">{_sanitize(icono)}</div>
             <div style="flex:1;">
-                <div class="service-title">{servicio.get('empresa', 'Sin empresa')}</div>
-                <div class="service-sub">{servicio.get('tipo')} · Titular: {servicio.get('titular', 'No especificado')}</div>
+                <div class="service-title">{_sanitize(servicio.get('empresa', 'Sin empresa'))}</div>
+                <div class="service-sub">{_sanitize(servicio.get('tipo'))} · Titular: {_sanitize(servicio.get('titular', 'No especificado'))}</div>
             </div>
         </div>
-        <div class="service-code" id="code_{codigo}" onclick="navigator.clipboard.writeText('{codigo}')">
-            💳 {codigo}
+        <div class="service-code" onclick="navigator.clipboard.writeText('{safe_codigo}')">
+            💳 {safe_codigo}
         </div>
         <div class="service-sub" style="text-align:right; font-size:0.75rem;">
-            Registrado por {servicio.get('registrado_por', '—')}
+            Registrado por {_sanitize(servicio.get('registrado_por', '—'))}
         </div>
     </div>""", unsafe_allow_html=True)
 
@@ -858,10 +859,10 @@ def render_user_info(nombre, familia_nombre, rol):
     iniciales = "".join([n[0].upper() for n in nombre.split()[:2]]) if nombre else "?"
     st.markdown(f"""
     <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
-        <div class="user-avatar">{iniciales}</div>
+        <div class="user-avatar">{_sanitize(iniciales)}</div>
         <div>
-            <div style="font-weight:800; font-size:1rem;">{nombre}</div>
-            <div class="family-badge">{familia_nombre} · {rol.title()}</div>
+            <div style="font-weight:800; font-size:1rem;">{_sanitize(nombre)}</div>
+            <div class="family-badge">{_sanitize(familia_nombre)} · {_sanitize(rol.title())}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -874,9 +875,9 @@ def render_section_header(icon, title, description=""):
     st.markdown(f"""
     <div style="margin-bottom:20px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
-            <span style="font-size:1.5rem;">{icon}</span>
-            <h2 style="margin:0; font-size:1.4rem; font-weight:900;">{title}</h2>
+            <span style="font-size:1.5rem;">{_sanitize(icon)}</span>
+            <h2 style="margin:0; font-size:1.4rem; font-weight:900;">{_sanitize(title)}</h2>
         </div>
-        {'<p style="color:var(--text-muted); font-size:0.9rem; margin:0;">' + description + '</p>' if description else ''}
+        {'<p style="color:var(--text-muted); font-size:0.9rem; margin:0;">' + _sanitize(description) + '</p>' if description else ''}
     </div>
     """, unsafe_allow_html=True)
