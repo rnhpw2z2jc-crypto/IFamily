@@ -1,7 +1,6 @@
 const CACHE_NAME = 'ifamily-v1';
 const urlsToCache = [
   './',
-  './static/manifest.json',
 ];
 
 self.addEventListener('install', event => {
