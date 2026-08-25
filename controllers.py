@@ -56,7 +56,6 @@ class AuthController:
         with st.form("login_form"):
             st.markdown("**Iniciar Sesión**")
             nombre = st.text_input("Tu nombre", placeholder="Ej. Carlos")
-            email = st.text_input("Email (opcional)", placeholder="tu@email.com")
             password = st.text_input("Contraseña", type="password", placeholder="Mínimo 6 caracteres")
 
             if st.form_submit_button("Iniciar Sesión", use_container_width=True):
@@ -65,7 +64,7 @@ class AuthController:
                 elif len(password) < 6:
                     st.error("La contraseña debe tener al menos 6 caracteres.")
                 else:
-                    user_id = self._login(nombre, email, password)
+                    user_id = self._login(nombre, password)
                     if user_id:
                         st.session_state.user_id = user_id
                         st.session_state.nombre_usuario = nombre
@@ -118,7 +117,7 @@ class AuthController:
             st.session_state.auth_mode = "login"
             st.rerun()
 
-    def _login(self, nombre, email, password):
+    def _login(self, nombre, password):
         """Login: verifica admin predefinido primero, luego usuarios de Firebase."""
         from models import ADMIN_CREDENTIALS
 
