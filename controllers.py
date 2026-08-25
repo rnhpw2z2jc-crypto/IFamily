@@ -11,7 +11,7 @@ import streamlit as st
 
 from models import (
     FirebaseService, UserModel, FamilyModel,
-    CitaModel, ServicioModel,
+    CitaModel, ServicioModel, PersonaModel,
 )
 import views
 
@@ -455,17 +455,82 @@ class SidebarController:
 
 
 # -------------------------------------------------------------
+# CONTROLADOR: PERSONAS DE SEGUIMIENTO
+# -------------------------------------------------------------
+class PersonasController:
+    def __init__(self, persona_model: PersonaModel):
+        self.model = persona_model
+
+    def render_form_crear(self, usuario):
+        with st.popover("➕ Agregar Persona", use_container_width=True):
+            with st.form("form_persona", clear_on_submit=True):
+                views.render_section_header("👤", "Nueva Persona")
+                nombre = st.text_input("Nombre completo", placeholder="Ej. Juan Pérez")
+                relacion = st.selectbox("Relación", [
+                    "Hijo/a", "Padre/Madre", "Abuelo/a", "Esposo/a",
+                    "Hermano/a", "Otro"
+                ])
+                fecha_nac = st.date_input("Fecha de nacimiento (opcional)", value=None)
+                notas = st.text_area("Notas (opcional)", placeholder="Ej. Alergias, condiciones médicas...")
+
+                if st.form_submit_button("Guardar", use_container_width=True):
+                    if not usuario or usuario == "Sin nombre":
+                        st.error("Escribe tu nombre en la barra lateral.")
+                    elif nombre:
+                        self.model.crear(nombre, relacion, fecha_nac, notas, usuario)
+                        st.success(f"¡'{nombre}' agregado!")
+                        st.rerun()
+                    else:
+                        st.error("Ingresa un nombre.")
+
+    def render_lista(self):
+        personas = self.model.get_all()
+        if not personas:
+            views.render_empty_state("👤", "Sin personas", "Agrega personas para hacerles seguimiento de citas y servicios.")
+            return personas
+
+        for pid, pdata in personas.items():
+            nombre_p = pdata.get("nombre", "Sin nombre")
+            relacion_p = pdata.get("relacion", "")
+            iniciales = "".join([n[0].upper() for n in nombre_p.split()[:2]]) if nombre_p else "?"
+
+            col_info, col_del = st.columns([5, 1])
+            with col_info:
+                st.markdown(f"""
+                <div class="glass-card-sm" style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                    <div class="user-avatar" style="width:36px;height:36px;font-size:0.85rem; background:var(--primary);">{iniciales}</div>
+                    <div style="flex:1;">
+                        <div style="font-weight:700;">{nombre_p}</div>
+                        <div style="font-size:0.75rem;color:var(--text-muted);">{relacion_p}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_del:
+                st.write("")
+                st.write("")
+                if st.button("🗑️", key=f"del_persona_{pid}"):
+                    self.model.eliminar(pid)
+                    st.rerun()
+
+        return personas
+
+
+# -------------------------------------------------------------
 # CONTROLADOR: CITAS MÉDICAS
 # -------------------------------------------------------------
 class CitasController:
     def __init__(self, cita_model: CitaModel):
         self.model = cita_model
 
-    def render_form_agendar(self, usuario):
+    def render_form_agendar(self, usuario, persona_names):
         with st.popover("➕ Agendar Cita", use_container_width=True):
             with st.form("form_citas", clear_on_submit=True):
                 views.render_section_header("📅", "Nueva Cita")
-                paciente = st.selectbox("Paciente", ["Papá", "Mamá", "Ambos"])
+                if persona_names:
+                    paciente = st.selectbox("Paciente", persona_names)
+                else:
+                    st.warning("Primero agrega personas en la pestaña Personas.")
+                    paciente = None
                 especialidad = st.text_input("Especialidad / Doctor", placeholder="Ej. Cardiología - Dr. Pérez")
                 lugar = st.text_input("Hospital / Clínica", placeholder="Ej. Hospital Nacional")
                 fecha = st.date_input("Fecha", value=date.today())
@@ -475,6 +540,8 @@ class CitasController:
                 if st.form_submit_button("Guardar Cita", use_container_width=True):
                     if not usuario or usuario == "Sin nombre":
                         st.error("Escribe tu nombre en la barra lateral.")
+                    elif not paciente:
+                        st.error("Agrega al menos una persona primero.")
                     elif especialidad and lugar:
                         self.model.crear(paciente, especialidad, lugar, fecha, hora, notas, usuario)
                         st.success("¡Cita registrada!")
@@ -497,8 +564,9 @@ class CitasController:
                     st.rerun()
 
     @staticmethod
-    def render_filtro_paciente(key="filtro_prog"):
-        return st.radio("Filtrar por paciente", ["Todos", "Papá", "Mamá", "Ambos"], horizontal=True, key=key)
+    def render_filtro_paciente(persona_names, key="filtro_prog"):
+        opciones = ["Todos"] + persona_names
+        return st.radio("Filtrar por paciente", opciones, horizontal=True, key=key)
 
     def render_lista_programadas(self, usuario, filtro):
         programadas = self.model.get_programadas()
@@ -524,9 +592,9 @@ class CitasController:
                     self.model.eliminar(key)
                     st.rerun()
 
-    def render_historial(self):
+    def render_historial(self, persona_names):
         views.render_section_header("📖", "Historial Clínico", "Registro de cada cita ya realizada.")
-        filtro = self.render_filtro_paciente(key="filtro_hist")
+        filtro = self.render_filtro_paciente(persona_names, key="filtro_hist")
         realizadas = self.model.get_realizadas()
         vista = CitaModel.filtrar_por_paciente(realizadas, filtro)
 
@@ -570,7 +638,7 @@ class ServiciosController:
                 tipo = st.selectbox("Tipo de servicio", ["⚡ Luz", "💧 Agua", "🔥 Gas", "🌐 Internet", "📞 Teléfono", "Otro"])
                 empresa = st.text_input("Empresa proveedora", placeholder="Ej. Enel, Sedapal")
                 codigo = st.text_input("Código de pago / Suministro", placeholder="Ej. 12345678")
-                titular = st.text_input("Titular del recibo", placeholder="Ej. Nombre de Papá o Mamá")
+                titular = st.text_input("Titular del recibo", placeholder="Ej. Nombre del titular")
 
                 if st.form_submit_button("Guardar Código", use_container_width=True):
                     if not usuario or usuario == "Sin nombre":

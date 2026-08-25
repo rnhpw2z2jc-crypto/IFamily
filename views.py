@@ -336,6 +336,12 @@ def inject_css():
         border-color: rgba(16, 185, 129, 0.25);
     }
 
+    .badge-persona {
+        background: rgba(99, 102, 241, 0.12);
+        color: #4338CA;
+        border-color: rgba(99, 102, 241, 0.25);
+    }
+
     .badge-hoy {
         background: rgba(239, 68, 68, 0.12);
         color: #DC2626;
@@ -733,8 +739,7 @@ def inject_auth_css():
 # BADGES
 # -------------------------------------------------------------
 def badge_paciente(paciente):
-    clase = {"Papá": "badge-papa", "Mamá": "badge-mama", "Ambos": "badge-ambos"}.get(paciente, "badge-ambos")
-    return f'<span class="badge {clase}">{paciente}</span>'
+    return f'<span class="badge badge-persona">{paciente}</span>'
 
 
 def badge_estado_cita(fecha_str):

@@ -8,11 +8,11 @@ import streamlit as st
 import views
 from models import (
     FirebaseService, UserModel, FamilyModel,
-    CitaModel, ServicioModel,
+    CitaModel, ServicioModel, PersonaModel,
 )
 from controllers import (
     AuthController, FamilyController, AdminController,
-    CitasController, ServiciosController,
+    CitasController, ServiciosController, PersonasController,
 )
 
 # -------------------------------------------------------------
@@ -132,6 +132,7 @@ if not familia_id:
 # -------------------------------------------------------------
 cita_model = CitaModel(firebase, familia_id)
 servicio_model = ServicioModel(firebase, familia_id)
+persona_model = PersonaModel(firebase, familia_id)
 
 # -------------------------------------------------------------
 # HEADER PRINCIPAL
@@ -164,28 +165,32 @@ st.write("")
 # -------------------------------------------------------------
 # TABS PRINCIPALES
 # -------------------------------------------------------------
-tab_citas, tab_historial, tab_servicios, tab_familia = st.tabs([
+tab_citas, tab_historial, tab_servicios, tab_personas, tab_familia = st.tabs([
     "📅 Citas Médicas",
     "📖 Historial Clínico",
     "💡 Servicios Públicos",
+    "👤 Personas",
     "👥 Mi Familia",
 ])
 
 citas_controller = CitasController(cita_model)
 servicios_controller = ServiciosController(servicio_model)
 family_controller = FamilyController(family_model, user_model)
+personas_controller = PersonasController(persona_model)
+
+persona_names = persona_model.nombres()
 
 # -------------------------------------------------------------
 # TAB: CITAS MÉDICAS
 # -------------------------------------------------------------
 with tab_citas:
-    views.render_section_header("📅", "Citas Médicas Próximas", "Gestiona las citas de Papá y Mamá.")
+    views.render_section_header("📅", "Citas Médicas Próximas", "Gestiona las citas de seguimiento.")
 
     col_filter, col_action = st.columns([3, 1])
     with col_filter:
-        filtro_prog = CitasController.render_filtro_paciente()
+        filtro_prog = CitasController.render_filtro_paciente(persona_names)
     with col_action:
-        citas_controller.render_form_agendar(nombre_usuario)
+        citas_controller.render_form_agendar(nombre_usuario, persona_names)
 
     citas_controller.render_lista_programadas(nombre_usuario, filtro_prog)
 
@@ -193,7 +198,7 @@ with tab_citas:
 # TAB: HISTORIAL CLÍNICO
 # -------------------------------------------------------------
 with tab_historial:
-    citas_controller.render_historial()
+    citas_controller.render_historial(persona_names)
 
 # -------------------------------------------------------------
 # TAB: SERVICIOS PÚBLICOS
@@ -208,6 +213,15 @@ with tab_servicios:
         servicios_controller.render_form_registrar(nombre_usuario)
 
     servicios_controller.render_lista(filtro_tipo)
+
+# -------------------------------------------------------------
+# TAB: PERSONAS DE SEGUIMIENTO
+# -------------------------------------------------------------
+with tab_personas:
+    views.render_section_header("👤", "Personas de Seguimiento", "Agrega a quienes deseas hacer seguimiento.")
+
+    personas_controller.render_form_crear(nombre_usuario)
+    personas_controller.render_lista()
 
 # -------------------------------------------------------------
 # TAB: MI FAMILIA

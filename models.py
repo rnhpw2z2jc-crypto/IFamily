@@ -400,3 +400,41 @@ class ServicioModel:
         if tipo == "Todos":
             return servicios
         return {k: v for k, v in servicios.items() if v.get("tipo") == tipo}
+
+
+# -------------------------------------------------------------
+# MODELO: PERSONAS DE SEGUIMIENTO (multi-familia)
+# -------------------------------------------------------------
+class PersonaModel:
+    """Personas cuyo seguimiento se registra en la familia (hijos, padres, etc.)."""
+
+    def __init__(self, firebase_service: FirebaseService, familia_id: str):
+        self.ref = firebase_service.reference(f"familia_data/{familia_id}/personas")
+
+    def get_all(self):
+        data = self.ref.get() if self.ref else None
+        return data or {}
+
+    def get_by_id(self, persona_id):
+        data = self.ref.child(persona_id).get()
+        return data or {}
+
+    def crear(self, nombre, relacion, fecha_nacimiento, notas, usuario):
+        persona_id = str(uuid.uuid4())[:8]
+        self.ref.child(persona_id).set({
+            "persona_id": persona_id,
+            "nombre": nombre,
+            "relacion": relacion,
+            "fecha_nacimiento": str(fecha_nacimiento) if fecha_nacimiento else "",
+            "notas": notas,
+            "creado_por": usuario,
+            "created_at": str(datetime.now()),
+        })
+        return persona_id
+
+    def eliminar(self, persona_id):
+        self.ref.child(persona_id).delete()
+
+    def nombres(self):
+        """Lista de nombres para usar en selectboxes."""
+        return [p.get("nombre", "") for p in self.get_all().values()]
