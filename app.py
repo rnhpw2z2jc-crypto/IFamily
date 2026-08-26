@@ -20,7 +20,7 @@ from controllers import (
 # -------------------------------------------------------------
 st.set_page_config(
     page_title="iFamily - Control Familiar",
-    page_icon="🏠",
+    page_icon="app/static/icon-192.png",
     layout="wide",
     initial_sidebar_state="expanded",
 )
