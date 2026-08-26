@@ -474,11 +474,12 @@ class PersonaModel:
         data = self.ref.child(persona_id).get()
         return data or {}
 
-    def crear(self, nombre, relacion, fecha_nacimiento, notas, usuario):
+    def crear(self, nombre, dni, relacion, fecha_nacimiento, notas, usuario):
         persona_id = str(uuid.uuid4())[:8]
         self.ref.child(persona_id).set({
             "persona_id": persona_id,
             "nombre": nombre,
+            "dni": dni,
             "relacion": relacion,
             "fecha_nacimiento": str(fecha_nacimiento) if fecha_nacimiento else "",
             "notas": notas,

@@ -5,7 +5,7 @@ Maneja autenticación, familias, formularios y eventos.
 Conecta directamente con el backend (models.py).
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, date as _date_class
 import time
 
 import streamlit as st
@@ -469,18 +469,24 @@ class PersonasController:
             with st.form("form_persona", clear_on_submit=True):
                 views.render_section_header("👤", "Nueva Persona")
                 nombre = st.text_input("Nombre completo", placeholder="Ej. Juan Pérez")
+                dni = st.text_input("DNI (opcional)", placeholder="Ej. 12345678")
                 relacion = st.selectbox("Relación", [
                     "Hijo/a", "Padre/Madre", "Abuelo/a", "Esposo/a",
                     "Hermano/a", "Otro"
                 ])
-                fecha_nac = st.date_input("Fecha de nacimiento (opcional)", value=None)
+                fecha_nac = st.date_input(
+                    "Fecha de nacimiento (opcional)",
+                    value=None,
+                    min_value=date(1900, 1, 1),
+                    max_value=date.today(),
+                )
                 notas = st.text_area("Notas (opcional)", placeholder="Ej. Alergias, condiciones médicas...")
 
                 if st.form_submit_button("Guardar", use_container_width=True):
                     if not usuario or usuario == "Sin nombre":
                         st.error("Escribe tu nombre en la barra lateral.")
                     elif nombre:
-                        self.model.crear(nombre, relacion, fecha_nac, notas, usuario)
+                        self.model.crear(nombre, dni, relacion, fecha_nac, notas, usuario)
                         st.success(f"¡'{nombre}' agregado!")
                         st.rerun()
                     else:
@@ -494,13 +500,15 @@ class PersonasController:
 
         for pid, pdata in personas.items():
             nombre_p = pdata.get("nombre", "Sin nombre")
+            dni_p = pdata.get("dni", "")
             relacion_p = pdata.get("relacion", "")
             iniciales = "".join([n[0].upper() for n in nombre_p.split()[:2]]) if nombre_p else "?"
 
             col_info, col_del = st.columns([5, 1])
             with col_info:
                 st.markdown(f"**{iniciales}** {nombre_p}")
-                st.caption(f"{relacion_p}")
+                dni_text = f" · DNI: {dni_p}" if dni_p else ""
+                st.caption(f"{relacion_p}{dni_text}")
             with col_del:
                 st.write("")
                 st.write("")
