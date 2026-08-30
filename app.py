@@ -171,6 +171,19 @@ views.render_kpis(
     total_emergencias=len(cita_model.get_emergencias()),
 )
 
+# -------------------------------------------------------------
+# ALERTAS
+# -------------------------------------------------------------
+alertas = views.obtener_alertas(cita_model, persona_model)
+
+# Notificación push del sistema (PWA)
+if "alertas_enviadas" not in st.session_state:
+    st.session_state.alertas_enviadas = ""
+views.inject_notificacion_script(alertas)
+
+if alertas:
+    views.render_alerta_panel(alertas)
+
 st.write("")
 
 # -------------------------------------------------------------

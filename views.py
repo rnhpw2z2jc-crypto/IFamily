@@ -6,6 +6,7 @@ CSS, tarjetas, badges, empty states, skeletons.
 """
 
 import streamlit as st
+from datetime import date, datetime, timedelta
 
 from models import CitaModel, ServicioModel, _sanitize
 
@@ -923,3 +924,152 @@ def render_section_header(icon, title, description=""):
         {'<p style="color:var(--text-muted); font-size:0.9rem; margin:0;">' + _sanitize(description) + '</p>' if description else ''}
     </div>
     """, unsafe_allow_html=True)
+
+
+# -------------------------------------------------------------
+# ALERTAS
+# -------------------------------------------------------------
+def obtener_alertas(cita_model, persona_model):
+    """Calcula alertas de seguimiento: citas próximas, emergencias, citas atrasadas."""
+    alertas = []
+    hoy = date.today()
+    citas = cita_model.get_all()
+
+    for key, cita in citas.items():
+        estado = cita.get("estado", "programada")
+        es_emergencia = cita.get("es_emergencia", False)
+
+        try:
+            f = datetime.strptime(cita.get("fecha", ""), "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            continue
+
+        dias = (f - hoy).days
+
+        if es_emergencia:
+            alertas.append({
+                "tipo": "emergencia",
+                "titulo": f"🚨 Emergencia registrada",
+                "detalle": f"{cita.get('paciente')} — {cita.get('motivo_emergencia', 'Emergencia')} ({cita.get('fecha')})",
+                "prioridad": "alta",
+            })
+        elif estado == "programada" and dias == 0:
+            alertas.append({
+                "tipo": "hoy",
+                "titulo": f"📅 Cita HOY",
+                "detalle": f"{cita.get('paciente')} — {cita.get('especialidad')} ({cita.get('hora', '-')})",
+                "prioridad": "alta",
+            })
+        elif estado == "programada" and dias == 1:
+            alertas.append({
+                "tipo": "manana",
+                "titulo": f"📅 Cita mañana",
+                "detalle": f"{cita.get('paciente')} — {cita.get('especialidad')} ({cita.get('fecha')})",
+                "prioridad": "media",
+            })
+        elif estado == "programada" and 2 <= dias <= 7:
+            alertas.append({
+                "tipo": "semana",
+                "titulo": f"📅 Cita esta semana",
+                "detalle": f"{cita.get('paciente')} — {cita.get('especialidad')} ({cita.get('fecha')})",
+                "prioridad": "media",
+            })
+        elif estado == "programada" and dias < 0:
+            alertas.append({
+                "tipo": "atrasada",
+                "titulo": f"⏰ Cita atrasada",
+                "detalle": f"{cita.get('paciente')} — {cita.get('especialidad')} ({cita.get('fecha')}) — marcarla como realizada",
+                "prioridad": "alta",
+            })
+
+    def _prioridad(val):
+        return {"alta": 0, "media": 1, "baja": 2}.get(val, 2)
+
+    alertas.sort(key=lambda a: _prioridad(a.get("prioridad")))
+    return alertas
+
+
+def render_alerta_panel(alertas):
+    total = len(alertas)
+    urgentes = sum(1 for a in alertas if a.get("prioridad") == "alta")
+    color = "#DC2626" if urgentes else "#D97706"
+
+    cards = ""
+    for a in alertas:
+        cards += f"""
+        <div class="alerta-item">
+            <span class="alerta-ico">{a['titulo'].split(' ')[0]}</span>
+            <div>
+                <div class="alerta-titulo">{_sanitize(a['titulo'])}</div>
+                <div class="alerta-detalle">{_sanitize(a['detalle'])}</div>
+            </div>
+        </div>"""
+
+    st.markdown(f"""
+    <style>
+    .alerta-panel {{
+        background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7));
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(245,158,11,0.3);
+        border-left: 5px solid {color};
+        border-radius: 14px;
+        padding: 16px 20px;
+        margin-bottom: 18px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+    }}
+    .alerta-header {{
+        display: flex; align-items: center; gap: 10px;
+        font-weight: 800; font-size: 1.05rem;
+        color: {color}; margin-bottom: 10px;
+    }}
+    .alerta-item {{
+        display: flex; align-items: flex-start; gap: 10px;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+    }}
+    .alerta-item:last-child {{ border-bottom: none; }}
+    .alerta-ico {{ font-size: 1.2rem; }}
+    .alerta-titulo {{ font-weight: 700; color: #1F2937; font-size: 0.92rem; }}
+    .alerta-detalle {{ color: #6B7280; font-size: 0.84rem; }}
+    </style>
+    <div class="alerta-panel">
+        <div class="alerta-header">
+            🔔 Tienes {total} alerta(s)
+            {f' — <span style="color:#DC2626;">{urgentes} urgente(s)</span>' if urgentes else ''}
+        </div>
+        {cards}
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def inject_notificacion_script(alertas):
+    """Inyecta JS para notificaciones push del sistema usando la PWA (cuando la app está abierta)."""
+    if not alertas:
+        return
+
+    titular = alertas[0].get("titulo", "iFamily")
+    detalle = alertas[0].get("detalle", "")
+
+    script = f"""
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {{
+        if ('Notification' in window && 'serviceWorker' in navigator) {{
+            Notification.requestPermission().then(function(perm) {{
+                if (perm === 'granted' && !sessionStorage.getItem('ifamily_notif')) {{
+                    sessionStorage.setItem('ifamily_notif', '1');
+                    setTimeout(function() {{
+                        if (document.visibilityState === 'visible') {{
+                            new Notification('iFamily · {_sanitize(titular)}', {{
+                                body: '{_sanitize(detalle)}',
+                                icon: './icon-192.png',
+                                tag: 'ifamily-alerta'
+                            }});
+                        }}
+                    }}, 1000);
+                }}
+            }});
+        }}
+    }});
+    </script>
+    """
+    st.markdown(script, unsafe_allow_html=True)
