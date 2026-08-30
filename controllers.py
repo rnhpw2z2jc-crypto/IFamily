@@ -553,6 +553,40 @@ class CitasController:
                     else:
                         st.error("Completa especialidad y lugar.")
 
+    def render_form_registrar_emergencia(self, usuario, persona_names):
+        with st.popover("🚨 Registrar Emergencia", use_container_width=True):
+            with st.form("form_emergencia", clear_on_submit=True):
+                views.render_section_header("🚨", "Emergencia")
+                st.caption("Registra un evento de emergencia que se sumará al historial clínico de la persona.")
+                if persona_names:
+                    paciente = st.selectbox("Paciente", persona_names)
+                else:
+                    st.warning("Primero agrega personas en la pestaña Personas.")
+                    paciente = None
+                motivo = st.text_input("Motivo / Tipo de emergencia", placeholder="Ej. Dolor abdominal intenso, caída, fiebre alta...")
+                atencion_recibida = st.text_area("Atención recibida", placeholder="Ej. Rehidratación, sutura, medicación de urgencia...")
+                lugar = st.text_input("Lugar de atención", placeholder="Ej. Emergencia del Hospital Nacional")
+                fecha = st.date_input(
+                    "Fecha del evento",
+                    value=date.today(),
+                    min_value=date(2020, 1, 1),
+                    max_value=date.today(),
+                )
+                hora = st.time_input("Hora")
+                notas = st.text_area("Notas / Seguimiento (opcional)", placeholder="Ej. Derivado a control con especialista...")
+
+                if st.form_submit_button("Guardar Emergencia", use_container_width=True):
+                    if not usuario or usuario == "Sin nombre":
+                        st.error("Escribe tu nombre en la barra lateral.")
+                    elif not paciente:
+                        st.error("Agrega al menos una persona primero.")
+                    elif not motivo:
+                        st.error("Describe el motivo de la emergencia.")
+                    else:
+                        self.model.registrar_emergencia(paciente, motivo, atencion_recibida, lugar, fecha, hora, notas, usuario)
+                        st.success(f"¡Emergencia de '{paciente}' registrada en el historial!")
+                        st.rerun()
+
     def render_form_marcar_realizada(self, key, usuario):
         with st.popover("✅ Marcar Realizada", use_container_width=True):
             with st.form(f"form_realizada_{key}"):
@@ -597,33 +631,80 @@ class CitasController:
                     st.rerun()
 
     def render_historial(self, persona_names):
-        views.render_section_header("📖", "Historial Clínico", "Registro de cada cita ya realizada.")
+        views.render_section_header("📖", "Historial Clínico", "Registro de citas realizadas y emergencias.")
         filtro = self.render_filtro_paciente(persona_names, key="filtro_hist")
         realizadas = self.model.get_realizadas()
         vista = CitaModel.filtrar_por_paciente(realizadas, filtro)
 
         if not vista:
-            views.render_empty_state("📖", "Historial vacío", "Las citas realizadas aparecerán aquí.")
+            views.render_empty_state("📖", "Historial vacío", "Las citas realizadas y emergencias aparecerán aquí.")
             return
 
         for key, cita in CitaModel.ordenar_por_fecha(vista, descendente=True):
-            titulo = f"🗂️ {cita.get('fecha')} — {cita.get('paciente')}: {cita.get('especialidad')}"
+            es_emergencia = cita.get("es_emergencia", False)
+            if es_emergencia:
+                titulo = f"🚨 {cita.get('fecha')} — {cita.get('paciente')}: {cita.get('motivo_emergencia', 'Emergencia')}"
+            else:
+                titulo = f"🗂️ {cita.get('fecha')} — {cita.get('paciente')}: {cita.get('especialidad')}"
             with st.expander(titulo):
-                st.markdown(views.badge_paciente(cita.get('paciente')), unsafe_allow_html=True)
-                st.markdown(f"**🏥 Lugar:** {cita.get('lugar')}")
+                if es_emergencia:
+                    st.markdown(views.badge_emergencia(cita.get('paciente')), unsafe_allow_html=True)
+                    st.markdown(f"**🏥 Lugar:** {cita.get('lugar', '—')}")
+                    if cita.get("motivo_emergencia"):
+                        st.markdown(f"**🚨 Motivo de emergencia:** {cita.get('motivo_emergencia')}")
+                    if cita.get("atencion_recibida"):
+                        st.markdown(f"**🩹 Atención recibida:** {cita.get('atencion_recibida')}")
+                    if cita.get("notas"):
+                        st.markdown(f"**📝 Notas:** {cita.get('notas')}")
+                else:
+                    st.markdown(views.badge_paciente(cita.get('paciente')), unsafe_allow_html=True)
+                    st.markdown(f"**🏥 Lugar:** {cita.get('lugar')}")
 
-                if cita.get("diagnostico"):
-                    st.markdown(f"**🩺 Diagnóstico:** {cita.get('diagnostico')}")
-                if cita.get("tratamiento"):
-                    st.markdown(f"**💊 Tratamiento:** {cita.get('tratamiento')}")
-                if cita.get("recomendaciones"):
-                    st.markdown(f"**📋 Recomendaciones:** {cita.get('recomendaciones')}")
-                if cita.get("proxima_cita_sugerida"):
-                    st.markdown(f"**⏭️ Próxima sugerida:** {cita.get('proxima_cita_sugerida')}")
+                    if cita.get("diagnostico"):
+                        st.markdown(f"**🩺 Diagnóstico:** {cita.get('diagnostico')}")
+                    if cita.get("tratamiento"):
+                        st.markdown(f"**💊 Tratamiento:** {cita.get('tratamiento')}")
+                    if cita.get("recomendaciones"):
+                        st.markdown(f"**📋 Recomendaciones:** {cita.get('recomendaciones')}")
+                    if cita.get("proxima_cita_sugerida"):
+                        st.markdown(f"**⏭️ Próxima sugerida:** {cita.get('proxima_cita_sugerida')}")
 
                 st.caption(f"Registrada por {cita.get('registrado_por', '—')} · Historial por {cita.get('actualizado_por', '—')}")
 
                 if st.button("🗑️ Eliminar", key=f"del_hist_{key}"):
+                    self.model.eliminar(key)
+                    st.rerun()
+
+    def render_lista_emergencias(self, persona_names):
+        views.render_section_header("🚨", "Emergencias", "Eventos de urgencia registrados y su atención.")
+        filtro = self.render_filtro_paciente(persona_names, key="filtro_emerg")
+        emergencias = self.model.get_emergencias()
+        vista = CitaModel.filtrar_por_paciente(emergencias, filtro)
+
+        if not vista:
+            views.render_empty_state("🚨", "Sin emergencias", "Los eventos de urgencia registrados aparecerán aquí.")
+            return
+
+        total = len(vista)
+        st.caption(f"**{total}** emergencia(s) registrada(s)")
+
+        for key, em in CitaModel.ordenar_por_fecha(vista, descendente=True):
+            titulo = f"🚨 {em.get('fecha')} — {em.get('paciente')}: {em.get('motivo_emergencia', 'Emergencia')}"
+            with st.expander(titulo):
+                st.markdown(views.badge_emergencia(em.get('paciente')), unsafe_allow_html=True)
+                st.markdown(f"**🏥 Lugar:** {em.get('lugar', '—')}")
+                if em.get("motivo_emergencia"):
+                    st.markdown(f"**🚨 Motivo:** {em.get('motivo_emergencia')}")
+                if em.get("atencion_recibida"):
+                    st.markdown(f"**🩹 Atención recibida:** {em.get('atencion_recibida')}")
+                if em.get("hora"):
+                    st.markdown(f"**🕐 Hora:** {em.get('hora')}")
+                if em.get("notas"):
+                    st.markdown(f"**📝 Notas:** {em.get('notas')}")
+
+                st.caption(f"Registrada por {em.get('registrado_por', '—')}")
+
+                if st.button("🗑️ Eliminar", key=f"del_emerg_{key}"):
                     self.model.eliminar(key)
                     st.rerun()
 

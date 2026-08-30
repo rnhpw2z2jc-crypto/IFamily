@@ -354,6 +354,12 @@ class CitaModel:
     def get_realizadas(self):
         return {k: v for k, v in self.get_all().items() if v.get("estado") == "realizada"}
 
+    def get_emergencias(self):
+        return {k: v for k, v in self.get_all().items() if v.get("es_emergencia")}
+
+    def get_no_emergencias(self):
+        return {k: v for k, v in self.get_all().items() if not v.get("es_emergencia")}
+
     def proxima_cita(self):
         programadas = self.get_programadas()
         if not programadas:
@@ -384,6 +390,29 @@ class CitaModel:
             "fecha_registro_historial": str(date.today()),
             "actualizado_por": usuario,
         })
+
+    def registrar_emergencia(self, paciente, motivo, atencion_recibida, lugar, fecha, hora, notas, usuario):
+        """Registra una emergencia y la agrega al historial clínico de la persona."""
+        nueva_emergencia = {
+            "paciente": paciente,
+            "motivo_emergencia": motivo,
+            "atencion_recibida": atencion_recibida,
+            "lugar": lugar or "—",
+            "fecha": str(fecha),
+            "hora": str(hora),
+            "notas": notas,
+            "estado": "realizada",
+            "es_emergencia": True,
+            "especialidad": f"🚨 Emergencia: {motivo}",
+            "diagnostico": motivo,
+            "tratamiento": atencion_recibida,
+            "recomendaciones": notas,
+            "registrado_por": usuario,
+            "fecha_registro_historial": str(date.today()),
+            "actualizado_por": usuario,
+            "created_at": str(datetime.now()),
+        }
+        self.ref.push(nueva_emergencia)
 
     def eliminar(self, key):
         self.ref.child(key).delete()

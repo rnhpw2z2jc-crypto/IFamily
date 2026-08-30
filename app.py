@@ -168,6 +168,7 @@ views.render_kpis(
     total_citas_programadas=len(cita_model.get_programadas()),
     proxima_cita=proxima_cita,
     total_servicios=len(servicio_model.get_all()),
+    total_emergencias=len(cita_model.get_emergencias()),
 )
 
 st.write("")
@@ -175,8 +176,9 @@ st.write("")
 # -------------------------------------------------------------
 # TABS PRINCIPALES
 # -------------------------------------------------------------
-tab_citas, tab_historial, tab_servicios, tab_personas, tab_familia = st.tabs([
+tab_citas, tab_emergencias, tab_historial, tab_servicios, tab_personas, tab_familia = st.tabs([
     "📅 Citas Médicas",
+    "🚨 Emergencias",
     "📖 Historial Clínico",
     "💡 Servicios Públicos",
     "👤 Personas",
@@ -203,6 +205,18 @@ with tab_citas:
         citas_controller.render_form_agendar(nombre_usuario, persona_names)
 
     citas_controller.render_lista_programadas(nombre_usuario, filtro_prog)
+
+# -------------------------------------------------------------
+# TAB: EMERGENCIAS
+# -------------------------------------------------------------
+with tab_emergencias:
+    col_e_action, col_e_info = st.columns([1, 2])
+    with col_e_action:
+        citas_controller.render_form_registrar_emergencia(nombre_usuario, persona_names)
+    with col_e_info:
+        st.caption("Las emergencias registradas se agregan automáticamente al historial clínico de la persona seleccionada.")
+
+    citas_controller.render_lista_emergencias(persona_names)
 
 # -------------------------------------------------------------
 # TAB: HISTORIAL CLÍNICO

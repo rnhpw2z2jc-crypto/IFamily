@@ -368,6 +368,14 @@ def inject_css():
         animation: pulse-badge 1.5s infinite;
     }
 
+    .badge-emergencia {
+        background: rgba(239, 68, 68, 0.18);
+        color: #B91C1C;
+        border-color: rgba(239, 68, 68, 0.4);
+        font-weight: 800;
+        animation: pulse-badge 1.5s infinite;
+    }
+
     @keyframes pulse-badge {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.7; }
@@ -742,6 +750,10 @@ def badge_paciente(paciente):
     return f'<span class="badge badge-persona">{_sanitize(paciente)}</span>'
 
 
+def badge_emergencia(paciente):
+    return f'<span class="badge badge-emergencia">🚨 {_sanitize(paciente)}</span>'
+
+
 def badge_estado_cita(fecha_str):
     texto, clase = CitaModel.estado_visual(fecha_str)
     if not texto:
@@ -779,14 +791,14 @@ def render_skeleton(rows=3):
 # -------------------------------------------------------------
 # KPIs
 # -------------------------------------------------------------
-def render_kpis(total_citas_programadas, proxima_cita, total_servicios):
+def render_kpis(total_citas_programadas, proxima_cita, total_servicios, total_emergencias=0):
     proxima_txt = "Sin citas"
     proxima_sub = "Programa la primera cita"
     if proxima_cita is not None:
         proxima_txt = f"{_sanitize(proxima_cita.get('fecha'))}"
         proxima_sub = f"{_sanitize(proxima_cita.get('paciente'))} · {_sanitize(proxima_cita.get('hora', ''))}"
 
-    k1, k2, k3 = st.columns(3)
+    k1, k2, k3, k4 = st.columns(4)
     with k1:
         st.markdown(f"""
         <div class="kpi-card">
@@ -810,6 +822,14 @@ def render_kpis(total_citas_programadas, proxima_cita, total_servicios):
             <div class="kpi-label">Servicios</div>
             <div class="kpi-value">{total_servicios}</div>
             <div class="kpi-sub">códigos guardados</div>
+        </div>""", unsafe_allow_html=True)
+    with k4:
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-icon">🚨</div>
+            <div class="kpi-label">Emergencias</div>
+            <div class="kpi-value">{total_emergencias}</div>
+            <div class="kpi-sub">registradas</div>
         </div>""", unsafe_allow_html=True)
 
 
