@@ -631,25 +631,36 @@ class CitasController:
                     st.rerun()
 
     def render_historial(self, persona_names):
-        views.render_section_header("📖", "Historial Clínico", "Registro de citas realizadas y emergencias.")
+        views.render_section_header("📖", "Historial Clínico", "Registro completo de citas y emergencias de cada persona.")
         filtro = self.render_filtro_paciente(persona_names, key="filtro_hist")
-        realizadas = self.model.get_realizadas()
-        vista = CitaModel.filtrar_por_paciente(realizadas, filtro)
+        todas = self.model.get_all()
+        vista = CitaModel.filtrar_por_paciente(todas, filtro)
 
         if not vista:
-            views.render_empty_state("📖", "Historial vacío", "Las citas realizadas y emergencias aparecerán aquí.")
+            views.render_empty_state("📖", "Sin registros", "Las citas registradas y emergencias aparecerán aquí.")
             return
+
+        cont_realizadas = sum(1 for c in vista.values() if c.get("estado") == "realizada")
+        cont_programadas = sum(1 for c in vista.values() if c.get("estado", "programada") == "programada")
+        st.caption(f"**{len(vista)}** registro(s) — {cont_programadas} pendiente(s) · {cont_realizadas} realizada(s)")
 
         for key, cita in CitaModel.ordenar_por_fecha(vista, descendente=True):
             es_emergencia = cita.get("es_emergencia", False)
+            es_realizada = cita.get("estado") == "realizada"
             if es_emergencia:
                 titulo = f"🚨 {cita.get('fecha')} — {cita.get('paciente')}: {cita.get('motivo_emergencia', 'Emergencia')}"
+                estado_badge = views.badge_emergencia(cita.get('paciente'))
             else:
-                titulo = f"🗂️ {cita.get('fecha')} — {cita.get('paciente')}: {cita.get('especialidad')}"
+                titulo = f"{cita.get('fecha')} — {cita.get('paciente')}: {cita.get('especialidad')}"
+                if es_realizada:
+                    estado_badge = views.badge_cita_realizada(cita.get('paciente'))
+                else:
+                    estado_badge = views.badge_cita_pendiente(cita.get('paciente'))
             with st.expander(titulo):
+                st.markdown(estado_badge, unsafe_allow_html=True)
+                st.markdown(f"**🏥 Lugar:** {cita.get('lugar', '—')}")
+
                 if es_emergencia:
-                    st.markdown(views.badge_emergencia(cita.get('paciente')), unsafe_allow_html=True)
-                    st.markdown(f"**🏥 Lugar:** {cita.get('lugar', '—')}")
                     if cita.get("motivo_emergencia"):
                         st.markdown(f"**🚨 Motivo de emergencia:** {cita.get('motivo_emergencia')}")
                     if cita.get("atencion_recibida"):
@@ -657,9 +668,6 @@ class CitasController:
                     if cita.get("notas"):
                         st.markdown(f"**📝 Notas:** {cita.get('notas')}")
                 else:
-                    st.markdown(views.badge_paciente(cita.get('paciente')), unsafe_allow_html=True)
-                    st.markdown(f"**🏥 Lugar:** {cita.get('lugar')}")
-
                     if cita.get("diagnostico"):
                         st.markdown(f"**🩺 Diagnóstico:** {cita.get('diagnostico')}")
                     if cita.get("tratamiento"):
@@ -668,6 +676,27 @@ class CitasController:
                         st.markdown(f"**📋 Recomendaciones:** {cita.get('recomendaciones')}")
                     if cita.get("proxima_cita_sugerida"):
                         st.markdown(f"**⏭️ Próxima sugerida:** {cita.get('proxima_cita_sugerida')}")
+
+                if not es_emergencia and not es_realizada:
+                    st.markdown("")
+                    with st.popover("✅ Marcar como realizada", key=f"hist_marcar_pop_{key}"):
+                        with st.form(f"hist_realizada_{key}"):
+                            views.render_section_header("📋", "Registrar Resultado")
+                            diagnostico = st.text_area("Diagnóstico / Resultado", key=f"hist_diag_{key}")
+                            tratamiento = st.text_area("Tratamiento / Medicamentos", key=f"hist_trat_{key}")
+                            recomendaciones = st.text_area("Recomendaciones", key=f"hist_reco_{key}")
+                            proxima_sugerida = st.date_input("Próxima cita sugerida", key=f"hist_prox_{key}", value=None)
+                            if st.form_submit_button("Guardar en Historial", use_container_width=True):
+                                self.model.marcar_realizada(
+                                    key,
+                                    diagnostico,
+                                    tratamiento,
+                                    recomendaciones,
+                                    proxima_sugerida,
+                                    cita.get('registrado_por', '—'),
+                                )
+                                st.success("Cita marcada como realizada y detalle guardado.")
+                                st.rerun()
 
                 st.caption(f"Registrada por {cita.get('registrado_por', '—')} · Historial por {cita.get('actualizado_por', '—')}")
 

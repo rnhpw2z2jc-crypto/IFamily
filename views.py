@@ -376,6 +376,20 @@ def inject_css():
         animation: pulse-badge 1.5s infinite;
     }
 
+    .badge-realizada {
+        background: rgba(16, 185, 129, 0.15);
+        color: #047857;
+        border-color: rgba(16, 185, 129, 0.3);
+        font-weight: 700;
+    }
+
+    .badge-pendiente {
+        background: rgba(245, 158, 11, 0.15);
+        color: #B45309;
+        border-color: rgba(245, 158, 11, 0.3);
+        font-weight: 700;
+    }
+
     @keyframes pulse-badge {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.7; }
@@ -752,6 +766,14 @@ def badge_paciente(paciente):
 
 def badge_emergencia(paciente):
     return f'<span class="badge badge-emergencia">🚨 {_sanitize(paciente)}</span>'
+
+
+def badge_cita_realizada(paciente):
+    return f'<span class="badge badge-realizada">✅ {_sanitize(paciente)}</span>'
+
+
+def badge_cita_pendiente(paciente):
+    return f'<span class="badge badge-pendiente">⏳ {_sanitize(paciente)}</span>'
 
 
 def badge_estado_cita(fecha_str):
