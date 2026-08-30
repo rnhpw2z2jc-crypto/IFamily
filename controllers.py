@@ -606,29 +606,41 @@ class CitasController:
         opciones = ["Todos"] + persona_names
         return st.radio("Filtrar por paciente", opciones, horizontal=True, key=key)
 
-    def render_lista_programadas(self, usuario, filtro):
+    def render_lista_programadas(self, usuario, persona_names):
+        views.render_section_header("📅", "Citas Médicas Próximas", "Gestiona las citas de seguimiento.")
+        filtro = self.render_filtro_paciente(persona_names, key="filtro_prog")
         programadas = self.model.get_programadas()
         vista = CitaModel.filtrar_por_paciente(programadas, filtro)
 
         if not vista:
-            views.render_empty_state("📅", "Sin citas programadas", "Agenda la primera cita médical usando el botón de arriba.")
+            views.render_empty_state("📅", "Sin citas programadas", "Agenda la primera cita usando el botón de arriba.")
             return
 
+        total = len(vista)
+        st.caption(f"**{total}** cita(s) programada(s)")
+
         for key, cita in CitaModel.ordenar_por_fecha(vista):
-            views.render_appt_card(cita)
+            titulo = f"📅 {cita.get('fecha')} — {cita.get('paciente')}: {cita.get('especialidad')}"
+            with st.expander(titulo):
+                st.markdown(
+                    views.badge_paciente(cita.get('paciente')) + views.badge_estado_cita(cita.get('fecha')),
+                    unsafe_allow_html=True,
+                )
+                st.markdown(f"**🏥 Lugar:** {cita.get('lugar', '—')}")
+                if cita.get("hora"):
+                    st.markdown(f"**🕐 Hora:** {cita.get('hora')}")
+                if cita.get("notas"):
+                    st.markdown(f"**📝 Notas:** {cita.get('notas')}")
 
-            if cita.get("notas"):
-                st.caption(f"📝 {cita.get('notas')} · Registrado por {cita.get('registrado_por', '—')}")
+                st.caption(f"Registrada por {cita.get('registrado_por', '—')}")
 
-            col_a, col_b, col_c = st.columns([2, 1, 1])
-            with col_a:
-                pass
-            with col_b:
-                self.render_form_marcar_realizada(key, usuario)
-            with col_c:
-                if st.button("🗑️", key=f"del_cita_{key}", use_container_width=True):
-                    self.model.eliminar(key)
-                    st.rerun()
+                col_b, col_c = st.columns([2, 1])
+                with col_b:
+                    self.render_form_marcar_realizada(key, usuario)
+                with col_c:
+                    if st.button("🗑️", key=f"del_cita_{key}", use_container_width=True):
+                        self.model.eliminar(key)
+                        st.rerun()
 
     def render_historial(self, persona_names):
         views.render_section_header("📖", "Historial Clínico", "Registro completo de citas y emergencias de cada persona.")

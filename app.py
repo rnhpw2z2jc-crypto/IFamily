@@ -209,15 +209,13 @@ persona_names = persona_model.nombres()
 # TAB: CITAS MÉDICAS
 # -------------------------------------------------------------
 with tab_citas:
-    views.render_section_header("📅", "Citas Médicas Próximas", "Gestiona las citas de seguimiento.")
-
-    col_filter, col_action = st.columns([3, 1])
-    with col_filter:
-        filtro_prog = CitasController.render_filtro_paciente(persona_names)
-    with col_action:
+    col_c_action, col_c_info = st.columns([1, 2])
+    with col_c_action:
         citas_controller.render_form_agendar(nombre_usuario, persona_names)
+    with col_c_info:
+        st.caption("Las citas registradas se suman al historial clínico de la persona para un control completo.")
 
-    citas_controller.render_lista_programadas(nombre_usuario, filtro_prog)
+    citas_controller.render_lista_programadas(nombre_usuario, persona_names)
 
 # -------------------------------------------------------------
 # TAB: EMERGENCIAS
