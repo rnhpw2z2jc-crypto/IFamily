@@ -691,7 +691,7 @@ class CitasController:
 
                 if not es_emergencia and not es_realizada:
                     st.markdown("")
-                    with st.popover("✅ Marcar como realizada", key=f"hist_marcar_pop_{key}"):
+                    with st.popover("✅ Marcar como realizada"):
                         with st.form(f"hist_realizada_{key}"):
                             views.render_section_header("📋", "Registrar Resultado")
                             diagnostico = st.text_area("Diagnóstico / Resultado", key=f"hist_diag_{key}")
