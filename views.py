@@ -946,7 +946,7 @@ def obtener_alertas(cita_model, persona_model):
 
         dias = (f - hoy).days
 
-        if es_emergencia:
+        if es_emergencia and dias >= -15:
             alertas.append({
                 "tipo": "emergencia",
                 "titulo": f"🚨 Emergencia registrada",
@@ -998,7 +998,6 @@ def render_alerta_panel(alertas):
     for a in alertas:
         cards += f"""
         <div class="alerta-item">
-            <span class="alerta-ico">{a['titulo'].split(' ')[0]}</span>
             <div>
                 <div class="alerta-titulo">{_sanitize(a['titulo'])}</div>
                 <div class="alerta-detalle">{_sanitize(a['detalle'])}</div>
