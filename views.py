@@ -670,6 +670,33 @@ def inject_css():
         background: var(--glass-bg) !important;
         backdrop-filter: blur(16px) !important;
     }
+
+    /* ---------------------------------------------------------
+       ALERTAS
+    --------------------------------------------------------- */
+    .alerta-panel {
+        background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7));
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(245,158,11,0.3);
+        border-radius: 14px;
+        padding: 16px 20px;
+        margin-bottom: 18px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+    }
+    .alerta-header {
+        display: flex; align-items: center; gap: 10px;
+        font-weight: 800; font-size: 1.05rem;
+        margin-bottom: 10px;
+    }
+    .alerta-item {
+        display: flex; align-items: flex-start;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+    }
+    .alerta-item:last-child { border-bottom: none; }
+    .alerta-titulo { font-weight: 700; color: #1F2937; font-size: 0.92rem; }
+    .alerta-detalle { color: #6B7280; font-size: 0.84rem; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -1005,34 +1032,8 @@ def render_alerta_panel(alertas):
         </div>"""
 
     st.markdown(f"""
-    <style>
-    .alerta-panel {{
-        background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7));
-        backdrop-filter: blur(16px);
-        border: 1px solid rgba(245,158,11,0.3);
-        border-left: 5px solid {color};
-        border-radius: 14px;
-        padding: 16px 20px;
-        margin-bottom: 18px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.06);
-    }}
-    .alerta-header {{
-        display: flex; align-items: center; gap: 10px;
-        font-weight: 800; font-size: 1.05rem;
-        color: {color}; margin-bottom: 10px;
-    }}
-    .alerta-item {{
-        display: flex; align-items: flex-start; gap: 10px;
-        padding: 8px 0;
-        border-bottom: 1px solid rgba(0,0,0,0.05);
-    }}
-    .alerta-item:last-child {{ border-bottom: none; }}
-    .alerta-ico {{ font-size: 1.2rem; }}
-    .alerta-titulo {{ font-weight: 700; color: #1F2937; font-size: 0.92rem; }}
-    .alerta-detalle {{ color: #6B7280; font-size: 0.84rem; }}
-    </style>
-    <div class="alerta-panel">
-        <div class="alerta-header">
+    <div class="alerta-panel" style="border-left:5px solid {color};">
+        <div class="alerta-header" style="color:{color};">
             🔔 Tienes {total} alerta(s)
             {f' — <span style="color:#DC2626;">{urgentes} urgente(s)</span>' if urgentes else ''}
         </div>
@@ -1046,29 +1047,31 @@ def inject_notificacion_script(alertas):
     if not alertas:
         return
 
+    import streamlit.components.v1 as components
+
     titular = alertas[0].get("titulo", "iFamily")
     detalle = alertas[0].get("detalle", "")
 
     script = f"""
     <script>
-    document.addEventListener('DOMContentLoaded', function() {{
+    (function() {{
         if ('Notification' in window && 'serviceWorker' in navigator) {{
             Notification.requestPermission().then(function(perm) {{
                 if (perm === 'granted' && !sessionStorage.getItem('ifamily_notif')) {{
                     sessionStorage.setItem('ifamily_notif', '1');
                     setTimeout(function() {{
-                        if (document.visibilityState === 'visible') {{
+                        try {{
                             new Notification('iFamily · {_sanitize(titular)}', {{
                                 body: '{_sanitize(detalle)}',
                                 icon: './icon-192.png',
                                 tag: 'ifamily-alerta'
                             }});
-                        }}
-                    }}, 1000);
+                        }} catch(e) {{}}
+                    }}, 1500);
                 }}
             }});
         }}
-    }});
+    }})();
     </script>
     """
-    st.markdown(script, unsafe_allow_html=True)
+    components.html(script, height=0, width=0)
