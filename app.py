@@ -8,11 +8,11 @@ import streamlit as st
 import views
 from models import (
     FirebaseService, UserModel, FamilyModel,
-    CitaModel, ServicioModel, PersonaModel, _sanitize,
+    CitaModel, ServicioModel, PersonaModel, MedicinaModel, _sanitize,
 )
 from controllers import (
     AuthController, FamilyController, AdminController,
-    CitasController, ServiciosController, PersonasController,
+    CitasController, ServiciosController, PersonasController, MedicinasController,
 )
 
 # -------------------------------------------------------------
@@ -143,6 +143,7 @@ if not family_model.is_miembro(familia_id, user_id):
 cita_model = CitaModel(firebase, familia_id)
 servicio_model = ServicioModel(firebase, familia_id)
 persona_model = PersonaModel(firebase, familia_id)
+medicina_model = MedicinaModel(firebase, familia_id)
 
 # -------------------------------------------------------------
 # HEADER PRINCIPAL
@@ -169,12 +170,13 @@ views.render_kpis(
     proxima_cita=proxima_cita,
     total_servicios=len(servicio_model.get_all()),
     total_emergencias=len(cita_model.get_emergencias()),
+    medicinas_por_agotar=len(medicina_model.get_proximas_a_agotar(3)),
 )
 
 # -------------------------------------------------------------
 # ALERTAS
 # -------------------------------------------------------------
-alertas = views.obtener_alertas(cita_model, persona_model)
+alertas = views.obtener_alertas(cita_model, persona_model, medicina_model)
 
 # Notificación push del sistema (PWA)
 if "alertas_enviadas" not in st.session_state:
@@ -189,10 +191,11 @@ st.write("")
 # -------------------------------------------------------------
 # TABS PRINCIPALES
 # -------------------------------------------------------------
-tab_citas, tab_emergencias, tab_historial, tab_servicios, tab_personas, tab_familia = st.tabs([
+tab_citas, tab_emergencias, tab_historial, tab_medicinas, tab_servicios, tab_personas, tab_familia = st.tabs([
     "📅 Citas Médicas",
     "🚨 Emergencias",
     "📖 Historial Clínico",
+    "💊 Medicinas",
     "💡 Servicios Públicos",
     "👤 Personas",
     "👥 Mi Familia",
@@ -202,6 +205,7 @@ citas_controller = CitasController(cita_model)
 servicios_controller = ServiciosController(servicio_model)
 family_controller = FamilyController(family_model, user_model)
 personas_controller = PersonasController(persona_model)
+medicinas_controller = MedicinasController(medicina_model)
 
 persona_names = persona_model.nombres()
 
@@ -234,6 +238,18 @@ with tab_emergencias:
 # -------------------------------------------------------------
 with tab_historial:
     citas_controller.render_historial(persona_names)
+
+# -------------------------------------------------------------
+# TAB: MEDICINAS
+# -------------------------------------------------------------
+with tab_medicinas:
+    col_m_action, col_m_info = st.columns([1, 2])
+    with col_m_action:
+        medicinas_controller.render_form_registrar(nombre_usuario, persona_names)
+    with col_m_info:
+        st.caption("Registra cada recogida de medicinas con su duración para saber cuándo debes volver a comprar.")
+
+    medicinas_controller.render_lista(persona_names)
 
 # -------------------------------------------------------------
 # TAB: SERVICIOS PÚBLICOS

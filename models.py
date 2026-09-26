@@ -523,3 +523,82 @@ class PersonaModel:
     def nombres(self):
         """Lista de nombres para usar en selectboxes."""
         return [p.get("nombre", "") for p in self.get_all().values()]
+
+
+# -------------------------------------------------------------
+# MODELO: MEDICINAS / RECOJOS (multi-familia)
+# -------------------------------------------------------------
+class MedicinaModel:
+    """Control de recogidas de medicinas: a quién pertenecen y cuántos días duran."""
+
+    def __init__(self, firebase_service: FirebaseService, familia_id: str):
+        self.ref = firebase_service.reference(f"familia_data/{familia_id}/medicinas")
+
+    def get_all(self):
+        data = self.ref.get() if self.ref else None
+        return data or {}
+
+    def crear(self, paciente, medicamento, presentacion, fecha_recojo, dias, indicacion, notas, usuario):
+        nuevo = {
+            "paciente": paciente,
+            "medicamento": medicamento,
+            "presentacion": presentacion,
+            "fecha_recojo": str(fecha_recojo),
+            "dias": int(dias),
+            "indicacion": indicacion,
+            "notas": notas,
+            "registrado_por": usuario,
+            "created_at": str(datetime.now()),
+        }
+        self.ref.push(nuevo)
+
+    def eliminar(self, key):
+        self.ref.child(key).delete()
+
+    def get_proximas_a_agotar(self, dias_limite=3):
+        """Medicinas que se agotan en <= dias_limite o ya están agotadas."""
+        hoy = date.today()
+        proximas = {}
+        for k, v in self.get_all().items():
+            dias_rest = self.dias_restantes(v.get("fecha_recojo"), v.get("dias"))
+            if dias_rest is not None and dias_rest <= dias_limite:
+                proximas[k] = v
+        return proximas
+
+    @staticmethod
+    def dias_restantes(fecha_recojo, dias):
+        try:
+            f = datetime.strptime(str(fecha_recojo), "%Y-%m-%d").date()
+            return (f + timedelta(days=int(dias)) - date.today()).days
+        except (ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def estado_visual(fecha_recojo, dias):
+        """Devuelve (texto, clase_badge) según los días restantes de la medicina."""
+        dias_rest = MedicinaModel.dias_restantes(fecha_recojo, dias)
+        if dias_rest is None:
+            return "", ""
+        if dias_rest < 0:
+            return "Agotada", "badge-agotada"
+        if dias_rest == 0:
+            return "Agota hoy", "badge-agotada"
+        if dias_rest <= 3:
+            return f"Quedan {dias_rest} día(s)", "badge-soon"
+        if dias_rest <= 7:
+            return f"Quedan {dias_rest} días", "badge-semana"
+        return f"Quedan {dias_rest} días", "badge-disponible"
+
+    @staticmethod
+    def filtrar_por_paciente(medicinas, paciente):
+        if paciente == "Todos":
+            return medicinas
+        return {k: v for k, v in medicinas.items() if v.get("paciente") == paciente}
+
+    @staticmethod
+    def ordenar_por_fecha(medicinas, descendente=True):
+        return sorted(
+            medicinas.items(),
+            key=lambda i: (i[1].get("fecha_recojo", ""), i[1].get("created_at", "")),
+            reverse=descendente,
+        )

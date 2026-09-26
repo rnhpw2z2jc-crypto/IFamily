@@ -12,7 +12,7 @@ import streamlit as st
 
 from models import (
     FirebaseService, UserModel, FamilyModel,
-    CitaModel, ServicioModel, PersonaModel,
+    CitaModel, ServicioModel, PersonaModel, MedicinaModel,
     get_admin_credentials, _hash_password, _verify_password, _sanitize,
 )
 import views
@@ -746,6 +746,75 @@ class CitasController:
                 st.caption(f"Registrada por {em.get('registrado_por', '—')}")
 
                 if st.button("🗑️ Eliminar", key=f"del_emerg_{key}"):
+                    self.model.eliminar(key)
+                    st.rerun()
+
+
+# -------------------------------------------------------------
+# CONTROLADOR: MEDICINAS
+# -------------------------------------------------------------
+class MedicinasController:
+    def __init__(self, medicina_model):
+        self.model = medicina_model
+
+    def render_form_registrar(self, usuario, persona_names):
+        with st.popover("➕ Registrar Recogida de Medicinas", use_container_width=True):
+            with st.form("form_medicinas", clear_on_submit=True):
+                views.render_section_header("💊", "Recogida de Medicinas")
+                if persona_names:
+                    paciente = st.selectbox("A quién pertenece", persona_names)
+                else:
+                    st.warning("Primero agrega personas en la pestaña Personas.")
+                    paciente = None
+                medicamento = st.text_input("Medicamento", placeholder="Ej. Amoxicilina")
+                presentacion = st.text_input("Presentación", placeholder="Ej. Cápsulas 500mg, Jarabe 100ml")
+                fecha_recojo = st.date_input("Fecha de recogida / compra", value=date.today())
+                dias = st.number_input("Días que dura", min_value=1, max_value=365, value=30, step=1)
+                indicacion = st.text_area("Indicación", placeholder="Ej. Tomar cada 8 horas")
+                notas = st.text_area("Notas (opcional)", placeholder="Ej. Requiere receta, guardar refrigerado...")
+
+                if st.form_submit_button("Guardar", use_container_width=True):
+                    if not usuario or usuario == "Sin nombre":
+                        st.error("Escribe tu nombre en la barra lateral.")
+                    elif not paciente:
+                        st.error("Agrega al menos una persona primero.")
+                    elif not medicamento:
+                        st.error("Ingresa el nombre del medicamento.")
+                    else:
+                        self.model.crear(paciente, medicamento, presentacion, fecha_recojo, dias, indicacion, notas, usuario)
+                        st.success("Recogida de medicinas registrada")
+                        st.rerun()
+
+    def render_lista(self, persona_names):
+        views.render_section_header("💊", "Control de Medicinas", "Control de recogidas, a quién pertenecen y días de duración.")
+        filtro = CitasController.render_filtro_paciente(persona_names, key="filtro_med")
+        medicinas = self.model.get_all()
+        vista = MedicinaModel.filtrar_por_paciente(medicinas, filtro)
+
+        if not vista:
+            views.render_empty_state("💊", "Sin medicinas registradas", "Registra la primera recogida usando el botón de arriba.")
+            return
+
+        total = len(vista)
+        st.caption(f"**{total}** registro(s) de medicinas")
+
+        for key, med in MedicinaModel.ordenar_por_fecha(vista):
+            titulo = f"💊 {med.get('medicamento')} — {med.get('paciente')} · {med.get('fecha_recojo')}"
+            with st.expander(titulo):
+                st.markdown(views.badge_medicina_estado(med.get('fecha_recojo'), med.get('dias'), med.get('paciente')), unsafe_allow_html=True)
+                if med.get("presentacion"):
+                    st.markdown(f"**📦 Presentación:** {med.get('presentacion')}")
+                st.markdown(f"**📅 Recogida:** {med.get('fecha_recojo')} · **Días:** {med.get('dias')}")
+                dias_rest = MedicinaModel.dias_restantes(med.get('fecha_recojo'), med.get('dias'))
+                if dias_rest is not None:
+                    st.markdown(f"**⏳ Días restantes:** {dias_rest}")
+                if med.get("indicacion"):
+                    st.markdown(f"**💡 Indicación:** {med.get('indicacion')}")
+                if med.get("notas"):
+                    st.markdown(f"**📝 Notas:** {med.get('notas')}")
+                st.caption(f"Registrado por {med.get('registrado_por', '—')}")
+
+                if st.button("🗑️ Eliminar", key=f"del_med_{key}"):
                     self.model.eliminar(key)
                     st.rerun()
 

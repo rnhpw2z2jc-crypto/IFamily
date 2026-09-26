@@ -8,7 +8,7 @@ CSS, tarjetas, badges, empty states, skeletons.
 import streamlit as st
 from datetime import date, datetime, timedelta
 
-from models import CitaModel, ServicioModel, _sanitize
+from models import CitaModel, ServicioModel, MedicinaModel, _sanitize
 
 
 # -------------------------------------------------------------
@@ -388,6 +388,28 @@ def inject_css():
         background: rgba(245, 158, 11, 0.15);
         color: #B45309;
         border-color: rgba(245, 158, 11, 0.3);
+        font-weight: 700;
+    }
+
+    .badge-agotada {
+        background: rgba(239, 68, 68, 0.15);
+        color: #DC2626;
+        border-color: rgba(239, 68, 68, 0.3);
+        font-weight: 700;
+        animation: pulse-badge 1.5s infinite;
+    }
+
+    .badge-soon {
+        background: rgba(249, 115, 22, 0.15);
+        color: #C2410C;
+        border-color: rgba(249, 115, 22, 0.3);
+        font-weight: 700;
+    }
+
+    .badge-disponible {
+        background: rgba(16, 185, 129, 0.15);
+        color: #047857;
+        border-color: rgba(16, 185, 129, 0.3);
         font-weight: 700;
     }
 
@@ -804,6 +826,14 @@ def badge_cita_pendiente(paciente):
     return f'<span class="badge badge-pendiente">⏳ {_sanitize(paciente)}</span>'
 
 
+def badge_medicina_estado(fecha_recojo, dias, paciente):
+    texto, clase = MedicinaModel.estado_visual(fecha_recojo, dias)
+    if not texto:
+        return ""
+    return (f'<span class="badge badge-persona">{_sanitize(paciente)}</span>'
+            f'<span class="badge {clase}">💊 {texto}</span>')
+
+
 def badge_estado_cita(fecha_str):
     texto, clase = CitaModel.estado_visual(fecha_str)
     if not texto:
@@ -841,14 +871,14 @@ def render_skeleton(rows=3):
 # -------------------------------------------------------------
 # KPIs
 # -------------------------------------------------------------
-def render_kpis(total_citas_programadas, proxima_cita, total_servicios, total_emergencias=0):
+def render_kpis(total_citas_programadas, proxima_cita, total_servicios, total_emergencias=0, medicinas_por_agotar=0):
     proxima_txt = "Sin citas"
     proxima_sub = "Programa la primera cita"
     if proxima_cita is not None:
         proxima_txt = f"{_sanitize(proxima_cita.get('fecha'))}"
         proxima_sub = f"{_sanitize(proxima_cita.get('paciente'))} · {_sanitize(proxima_cita.get('hora', ''))}"
 
-    k1, k2, k3, k4 = st.columns(4)
+    k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
         st.markdown(f"""
         <div class="kpi-card">
@@ -880,6 +910,15 @@ def render_kpis(total_citas_programadas, proxima_cita, total_servicios, total_em
             <div class="kpi-label">Emergencias</div>
             <div class="kpi-value">{total_emergencias}</div>
             <div class="kpi-sub">registradas</div>
+        </div>""", unsafe_allow_html=True)
+    with k5:
+        sub_med = "por agotar" if medicinas_por_agotar else "todo en orden"
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-icon">💊</div>
+            <div class="kpi-label">Medicinas</div>
+            <div class="kpi-value">{medicinas_por_agotar}</div>
+            <div class="kpi-sub">{sub_med}</div>
         </div>""", unsafe_allow_html=True)
 
 
@@ -956,8 +995,8 @@ def render_section_header(icon, title, description=""):
 # -------------------------------------------------------------
 # ALERTAS
 # -------------------------------------------------------------
-def obtener_alertas(cita_model, persona_model):
-    """Calcula alertas de seguimiento: citas próximas, emergencias, citas atrasadas."""
+def obtener_alertas(cita_model, persona_model, medicina_model=None):
+    """Calcula alertas de seguimiento: citas próximas, emergencias, citas atrasadas, medicinas por agotar."""
     alertas = []
     hoy = date.today()
     citas = cita_model.get_all()
@@ -976,7 +1015,7 @@ def obtener_alertas(cita_model, persona_model):
         if es_emergencia and dias >= -15:
             alertas.append({
                 "tipo": "emergencia",
-                "titulo": f"🚨 Emergencia registrada",
+                "titulo": "🚨 Emergencia registrada",
                 "detalle": f"{cita.get('paciente')} — {cita.get('motivo_emergencia', 'Emergencia')} ({cita.get('fecha')})",
                 "prioridad": "alta",
             })
@@ -1007,6 +1046,22 @@ def obtener_alertas(cita_model, persona_model):
                 "titulo": f"⏰ Cita atrasada",
                 "detalle": f"{cita.get('paciente')} — {cita.get('especialidad')} ({cita.get('fecha')}) — marcarla como realizada",
                 "prioridad": "alta",
+            })
+
+    if medicina_model is not None:
+        for key, med in medicina_model.get_proximas_a_agotar(3).items():
+            dias_rest = MedicinaModel.dias_restantes(med.get("fecha_recojo"), med.get("dias"))
+            if dias_rest is not None and dias_rest < 0:
+                detalle = f"{med.get('medicamento')} — {med.get('paciente')} — se agotó hace {abs(dias_rest)} día(s)"
+            elif dias_rest == 0:
+                detalle = f"{med.get('medicamento')} — {med.get('paciente')} — se agota hoy"
+            else:
+                detalle = f"{med.get('medicamento')} — {med.get('paciente')} — quedan {dias_rest} día(s)"
+            alertas.append({
+                "tipo": "medicina",
+                "titulo": "💊 Medicina por agotar",
+                "detalle": detalle,
+                "prioridad": "alta" if dias_rest <= 0 else "media",
             })
 
     def _prioridad(val):
