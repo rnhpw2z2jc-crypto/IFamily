@@ -1076,25 +1076,29 @@ def render_alerta_panel(alertas):
     urgentes = sum(1 for a in alertas if a.get("prioridad") == "alta")
     color = "#DC2626" if urgentes else "#D97706"
 
-    cards = ""
-    for a in alertas:
-        cards += f"""
-        <div class="alerta-item">
-            <div>
-                <div class="alerta-titulo">{_sanitize(a['titulo'])}</div>
-                <div class="alerta-detalle">{_sanitize(a['detalle'])}</div>
-            </div>
-        </div>"""
-
-    st.markdown(f"""
-    <div class="alerta-panel" style="border-left:5px solid {color};">
-        <div class="alerta-header" style="color:{color};">
-            🔔 Tienes {total} alerta(s)
-            {f' — <span style="color:#DC2626;">{urgentes} urgente(s)</span>' if urgentes else ''}
-        </div>
-        {cards}
-    </div>
-    """, unsafe_allow_html=True)
+    # Importante: el HTML se genera sin indentación ni líneas en blanco.
+    # Si se indenta con 4+ espacios, Markdown lo interpreta como bloque de
+    # código y muestra las etiquetas crudas (alertas "rotas").
+    cards = "".join(
+        '<div class="alerta-item"><div>'
+        f'<div class="alerta-titulo">{_sanitize(a["titulo"])}</div>'
+        f'<div class="alerta-detalle">{_sanitize(a["detalle"])}</div>'
+        "</div></div>"
+        for a in alertas
+    )
+    urgentes_html = (
+        f' — <span style="color:#DC2626;">{urgentes} urgente(s)</span>'
+        if urgentes else ""
+    )
+    panel_html = (
+        f'<div class="alerta-panel" style="border-left:5px solid {color};">'
+        f'<div class="alerta-header" style="color:{color};">'
+        f"🔔 Tienes {total} alerta(s){urgentes_html}"
+        "</div>"
+        f"{cards}"
+        "</div>"
+    )
+    st.markdown(panel_html, unsafe_allow_html=True)
 
 
 def inject_notificacion_script(alertas):
