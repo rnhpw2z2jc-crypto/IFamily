@@ -237,6 +237,8 @@ with tab_emergencias:
 # TAB: HISTORIAL CLÍNICO
 # -------------------------------------------------------------
 with tab_historial:
+    medicinas_controller.render_resumen_historial(persona_names)
+    st.markdown("")
     citas_controller.render_historial(persona_names)
 
 # -------------------------------------------------------------

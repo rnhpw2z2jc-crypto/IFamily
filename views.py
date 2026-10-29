@@ -413,6 +413,37 @@ def inject_css():
         font-weight: 700;
     }
 
+    .badge-continuo {
+        background: rgba(59, 130, 246, 0.15);
+        color: #1D4ED8;
+        border-color: rgba(59, 130, 246, 0.3);
+        font-weight: 700;
+    }
+
+    /* Banners de estado de cita (color característico) */
+    .estado-banner {
+        padding: 8px 14px;
+        border-radius: 10px;
+        font-weight: 800;
+        font-size: 0.85rem;
+        margin-bottom: 12px;
+    }
+    .estado-banner.estado-realizada {
+        background: rgba(16, 185, 129, 0.15);
+        color: #047857;
+        border-left: 5px solid #10B981;
+    }
+    .estado-banner.estado-pendiente {
+        background: rgba(245, 158, 11, 0.15);
+        color: #B45309;
+        border-left: 5px solid #F59E0B;
+    }
+    .estado-banner.estado-emergencia {
+        background: rgba(239, 68, 68, 0.15);
+        color: #B91C1C;
+        border-left: 5px solid #EF4444;
+    }
+
     @keyframes pulse-badge {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.7; }
@@ -826,12 +857,37 @@ def badge_cita_pendiente(paciente):
     return f'<span class="badge badge-pendiente">⏳ {_sanitize(paciente)}</span>'
 
 
-def badge_medicina_estado(fecha_recojo, dias, paciente):
-    texto, clase = MedicinaModel.estado_visual(fecha_recojo, dias)
+def badge_medicina_estado(fecha_recojo, dias, paciente, tipo="temporal"):
+    texto, clase = MedicinaModel.estado_visual(fecha_recojo, dias, tipo)
     if not texto:
         return ""
     return (f'<span class="badge badge-persona">{_sanitize(paciente)}</span>'
             f'<span class="badge {clase}">💊 {texto}</span>')
+
+
+def cita_estado_tipo(cita):
+    """Devuelve 'emergencia', 'realizada' o 'pendiente' según la cita."""
+    if cita.get("es_emergencia"):
+        return "emergencia"
+    if cita.get("estado") == "realizada":
+        return "realizada"
+    return "pendiente"
+
+
+def cita_estado_banner(cita):
+    """Banner de color que diferencia visualmente el estado de una cita."""
+    tipo = cita_estado_tipo(cita)
+    etiquetas = {
+        "realizada": ("✅ Cita realizada", "estado-realizada"),
+        "pendiente": ("⏳ Cita pendiente", "estado-pendiente"),
+        "emergencia": ("🚨 Emergencia", "estado-emergencia"),
+    }
+    texto, clase = etiquetas[tipo]
+    return f'<div class="estado-banner {clase}">{texto}</div>'
+
+
+def cita_estado_emoji(cita):
+    return {"realizada": "✅", "pendiente": "⏳", "emergencia": "🚨"}[cita_estado_tipo(cita)]
 
 
 def badge_estado_cita(fecha_str):

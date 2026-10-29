@@ -538,13 +538,17 @@ class MedicinaModel:
         data = self.ref.get() if self.ref else None
         return data or {}
 
-    def crear(self, paciente, medicamento, presentacion, fecha_recojo, dias, indicacion, notas, usuario):
+    def crear(self, paciente, medicamento, presentacion, cantidad, frecuencia, tipo,
+              fecha_recojo, dias, indicacion, notas, usuario):
         nuevo = {
             "paciente": paciente,
             "medicamento": medicamento,
             "presentacion": presentacion,
+            "cantidad": cantidad,
+            "frecuencia": frecuencia,
+            "tipo": tipo,  # "continuo" | "temporal"
             "fecha_recojo": str(fecha_recojo),
-            "dias": int(dias),
+            "dias": int(dias) if dias else 0,
             "indicacion": indicacion,
             "notas": notas,
             "registrado_por": usuario,
@@ -556,17 +560,33 @@ class MedicinaModel:
         self.ref.child(key).delete()
 
     def get_proximas_a_agotar(self, dias_limite=3):
-        """Medicinas que se agotan en <= dias_limite o ya están agotadas."""
-        hoy = date.today()
+        """Medicinas temporales que se agotan en <= dias_limite o ya están agotadas.
+        Los tratamientos continuos no se agotan por días, por lo que se omiten."""
         proximas = {}
         for k, v in self.get_all().items():
-            dias_rest = self.dias_restantes(v.get("fecha_recojo"), v.get("dias"))
+            if v.get("tipo") == "continuo":
+                continue
+            dias_rest = self.dias_restantes(v.get("fecha_recojo"), v.get("dias"), v.get("tipo"))
             if dias_rest is not None and dias_rest <= dias_limite:
                 proximas[k] = v
         return proximas
 
+    def get_activas(self):
+        """Medicinas que la persona todavía debe tomar: continuas o temporales no agotadas."""
+        activas = {}
+        for k, v in self.get_all().items():
+            if v.get("tipo") == "continuo":
+                activas[k] = v
+                continue
+            dias_rest = self.dias_restantes(v.get("fecha_recojo"), v.get("dias"), v.get("tipo"))
+            if dias_rest is None or dias_rest >= 0:
+                activas[k] = v
+        return activas
+
     @staticmethod
-    def dias_restantes(fecha_recojo, dias):
+    def dias_restantes(fecha_recojo, dias, tipo="temporal"):
+        if tipo == "continuo":
+            return None
         try:
             f = datetime.strptime(str(fecha_recojo), "%Y-%m-%d").date()
             return (f + timedelta(days=int(dias)) - date.today()).days
@@ -574,9 +594,11 @@ class MedicinaModel:
             return None
 
     @staticmethod
-    def estado_visual(fecha_recojo, dias):
+    def estado_visual(fecha_recojo, dias, tipo="temporal"):
         """Devuelve (texto, clase_badge) según los días restantes de la medicina."""
-        dias_rest = MedicinaModel.dias_restantes(fecha_recojo, dias)
+        if tipo == "continuo":
+            return "Tratamiento continuo", "badge-continuo"
+        dias_rest = MedicinaModel.dias_restantes(fecha_recojo, dias, tipo)
         if dias_rest is None:
             return "", ""
         if dias_rest < 0:

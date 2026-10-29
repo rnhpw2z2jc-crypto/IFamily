@@ -607,40 +607,64 @@ class CitasController:
         return st.radio("Filtrar por paciente", opciones, horizontal=True, key=key)
 
     def render_lista_programadas(self, usuario, persona_names):
-        views.render_section_header("📅", "Citas Médicas Próximas", "Gestiona las citas de seguimiento.")
+        views.render_section_header("📅", "Registro de Citas Médicas", "Citas pendientes y realizadas, diferenciadas por color.")
         filtro = self.render_filtro_paciente(persona_names, key="filtro_prog")
-        programadas = self.model.get_programadas()
-        vista = CitaModel.filtrar_por_paciente(programadas, filtro)
+        todas = self.model.get_no_emergencias()
+        vista = CitaModel.filtrar_por_paciente(todas, filtro)
 
         if not vista:
-            views.render_empty_state("📅", "Sin citas programadas", "Agenda la primera cita usando el botón de arriba.")
+            views.render_empty_state("📅", "Sin citas registradas", "Agenda la primera cita usando el botón de arriba.")
             return
 
-        total = len(vista)
-        st.caption(f"**{total}** cita(s) programada(s)")
+        pendientes = {k: v for k, v in vista.items() if v.get("estado", "programada") == "programada"}
+        realizadas = {k: v for k, v in vista.items() if v.get("estado") == "realizada"}
+        st.caption(
+            f"**{len(vista)}** cita(s) — "
+            f"⏳ {len(pendientes)} pendiente(s) · ✅ {len(realizadas)} realizada(s)"
+        )
 
-        for key, cita in CitaModel.ordenar_por_fecha(vista):
-            titulo = f"📅 {cita.get('fecha')} — {cita.get('paciente')}: {cita.get('especialidad')}"
+        # Pendientes primero (por fecha ascendente), luego realizadas (más reciente primero)
+        ordenadas = (
+            CitaModel.ordenar_por_fecha(pendientes)
+            + CitaModel.ordenar_por_fecha(realizadas, descendente=True)
+        )
+
+        for key, cita in ordenadas:
+            es_realizada = cita.get("estado") == "realizada"
+            emoji = views.cita_estado_emoji(cita)
+            titulo = f"{emoji} {cita.get('fecha')} — {cita.get('paciente')}: {cita.get('especialidad')}"
             with st.expander(titulo):
-                st.markdown(
-                    views.badge_paciente(cita.get('paciente')) + views.badge_estado_cita(cita.get('fecha')),
-                    unsafe_allow_html=True,
-                )
+                st.markdown(views.cita_estado_banner(cita), unsafe_allow_html=True)
+                badges = views.badge_paciente(cita.get('paciente'))
+                if not es_realizada:
+                    badges += views.badge_estado_cita(cita.get('fecha'))
+                st.markdown(badges, unsafe_allow_html=True)
                 st.markdown(f"**🏥 Lugar:** {cita.get('lugar', '—')}")
                 if cita.get("hora"):
                     st.markdown(f"**🕐 Hora:** {cita.get('hora')}")
                 if cita.get("notas"):
                     st.markdown(f"**📝 Notas:** {cita.get('notas')}")
 
-                st.caption(f"Registrada por {cita.get('registrado_por', '—')}")
-
-                col_b, col_c = st.columns([2, 1])
-                with col_b:
-                    self.render_form_marcar_realizada(key, usuario)
-                with col_c:
-                    if st.button("🗑️", key=f"del_cita_{key}", use_container_width=True):
+                if es_realizada:
+                    if cita.get("diagnostico"):
+                        st.markdown(f"**🩺 Diagnóstico:** {cita.get('diagnostico')}")
+                    if cita.get("tratamiento"):
+                        st.markdown(f"**💊 Tratamiento:** {cita.get('tratamiento')}")
+                    if cita.get("recomendaciones"):
+                        st.markdown(f"**📋 Recomendaciones:** {cita.get('recomendaciones')}")
+                    st.caption(f"Realizada · Registrada por {cita.get('registrado_por', '—')}")
+                    if st.button("🗑️ Eliminar", key=f"del_cita_{key}"):
                         self.model.eliminar(key)
                         st.rerun()
+                else:
+                    st.caption(f"Registrada por {cita.get('registrado_por', '—')}")
+                    col_b, col_c = st.columns([2, 1])
+                    with col_b:
+                        self.render_form_marcar_realizada(key, usuario)
+                    with col_c:
+                        if st.button("🗑️", key=f"del_cita_{key}", use_container_width=True):
+                            self.model.eliminar(key)
+                            st.rerun()
 
     def render_historial(self, persona_names):
         views.render_section_header("📖", "Historial Clínico", "Registro completo de citas y emergencias de cada persona.")
@@ -659,16 +683,18 @@ class CitasController:
         for key, cita in CitaModel.ordenar_por_fecha(vista, descendente=True):
             es_emergencia = cita.get("es_emergencia", False)
             es_realizada = cita.get("estado") == "realizada"
+            emoji = views.cita_estado_emoji(cita)
             if es_emergencia:
-                titulo = f"🚨 {cita.get('fecha')} — {cita.get('paciente')}: {cita.get('motivo_emergencia', 'Emergencia')}"
+                titulo = f"{emoji} {cita.get('fecha')} — {cita.get('paciente')}: {cita.get('motivo_emergencia', 'Emergencia')}"
                 estado_badge = views.badge_emergencia(cita.get('paciente'))
             else:
-                titulo = f"{cita.get('fecha')} — {cita.get('paciente')}: {cita.get('especialidad')}"
+                titulo = f"{emoji} {cita.get('fecha')} — {cita.get('paciente')}: {cita.get('especialidad')}"
                 if es_realizada:
                     estado_badge = views.badge_cita_realizada(cita.get('paciente'))
                 else:
                     estado_badge = views.badge_cita_pendiente(cita.get('paciente'))
             with st.expander(titulo):
+                st.markdown(views.cita_estado_banner(cita), unsafe_allow_html=True)
                 st.markdown(estado_badge, unsafe_allow_html=True)
                 st.markdown(f"**🏥 Lugar:** {cita.get('lugar', '—')}")
 
@@ -768,9 +794,21 @@ class MedicinasController:
                     paciente = None
                 medicamento = st.text_input("Medicamento", placeholder="Ej. Amoxicilina")
                 presentacion = st.text_input("Presentación", placeholder="Ej. Cápsulas 500mg, Jarabe 100ml")
-                fecha_recojo = st.date_input("Fecha de recogida / compra", value=date.today())
-                dias = st.number_input("Días que dura", min_value=1, max_value=365, value=30, step=1)
-                indicacion = st.text_area("Indicación", placeholder="Ej. Tomar cada 8 horas")
+                es_continuo = st.checkbox(
+                    "🔁 Tratamiento continuo (de por vida, sin fecha de fin)",
+                    help="Marca esta opción para tratamientos permanentes (ej. presión, diabetes).",
+                )
+                col1, col2 = st.columns(2)
+                with col1:
+                    cantidad = st.text_input("Cantidad por toma", placeholder="Ej. 1 tableta, 10 ml")
+                with col2:
+                    frecuencia = st.text_input("Frecuencia", placeholder="Ej. Cada 8 horas")
+                fecha_recojo = st.date_input("Fecha de inicio / recogida", value=date.today())
+                dias = st.number_input(
+                    "Días que dura (solo tratamiento temporal)",
+                    min_value=1, max_value=3650, value=30, step=1,
+                )
+                indicacion = st.text_area("Indicación", placeholder="Ej. Tomar después de las comidas")
                 notas = st.text_area("Notas (opcional)", placeholder="Ej. Requiere receta, guardar refrigerado...")
 
                 if st.form_submit_button("Guardar", use_container_width=True):
@@ -781,12 +819,17 @@ class MedicinasController:
                     elif not medicamento:
                         st.error("Ingresa el nombre del medicamento.")
                     else:
-                        self.model.crear(paciente, medicamento, presentacion, fecha_recojo, dias, indicacion, notas, usuario)
+                        tipo = "continuo" if es_continuo else "temporal"
+                        dias_final = 0 if es_continuo else int(dias)
+                        self.model.crear(
+                            paciente, medicamento, presentacion, cantidad, frecuencia, tipo,
+                            fecha_recojo, dias_final, indicacion, notas, usuario,
+                        )
                         st.success("Recogida de medicinas registrada")
                         st.rerun()
 
     def render_lista(self, persona_names):
-        views.render_section_header("💊", "Control de Medicinas", "Control de recogidas, a quién pertenecen y días de duración.")
+        views.render_section_header("💊", "Control de Medicinas", "Control de recogidas, a quién pertenecen y duración del tratamiento.")
         filtro = CitasController.render_filtro_paciente(persona_names, key="filtro_med")
         medicinas = self.model.get_all()
         vista = MedicinaModel.filtrar_por_paciente(medicinas, filtro)
@@ -799,15 +842,30 @@ class MedicinasController:
         st.caption(f"**{total}** registro(s) de medicinas")
 
         for key, med in MedicinaModel.ordenar_por_fecha(vista):
-            titulo = f"💊 {med.get('medicamento')} — {med.get('paciente')} · {med.get('fecha_recojo')}"
+            tipo = med.get("tipo", "temporal")
+            tipo_txt = "🔁 Continuo" if tipo == "continuo" else "📆 Temporal"
+            titulo = f"💊 {med.get('medicamento')} — {med.get('paciente')} · {tipo_txt}"
             with st.expander(titulo):
-                st.markdown(views.badge_medicina_estado(med.get('fecha_recojo'), med.get('dias'), med.get('paciente')), unsafe_allow_html=True)
+                st.markdown(
+                    views.badge_medicina_estado(
+                        med.get('fecha_recojo'), med.get('dias'), med.get('paciente'), tipo
+                    ),
+                    unsafe_allow_html=True,
+                )
                 if med.get("presentacion"):
                     st.markdown(f"**📦 Presentación:** {med.get('presentacion')}")
-                st.markdown(f"**📅 Recogida:** {med.get('fecha_recojo')} · **Días:** {med.get('dias')}")
-                dias_rest = MedicinaModel.dias_restantes(med.get('fecha_recojo'), med.get('dias'))
-                if dias_rest is not None:
-                    st.markdown(f"**⏳ Días restantes:** {dias_rest}")
+                if med.get("cantidad"):
+                    st.markdown(f"**⚖️ Cantidad por toma:** {med.get('cantidad')}")
+                if med.get("frecuencia"):
+                    st.markdown(f"**🕐 Frecuencia:** {med.get('frecuencia')}")
+                st.markdown(f"**📅 Inicio / recogida:** {med.get('fecha_recojo')}")
+                if tipo == "continuo":
+                    st.markdown("**🔁 Tipo:** Tratamiento continuo (sin fecha de fin)")
+                else:
+                    st.markdown(f"**📆 Tipo:** Temporal · **Días:** {med.get('dias')}")
+                    dias_rest = MedicinaModel.dias_restantes(med.get('fecha_recojo'), med.get('dias'), tipo)
+                    if dias_rest is not None:
+                        st.markdown(f"**⏳ Días restantes:** {dias_rest}")
                 if med.get("indicacion"):
                     st.markdown(f"**💡 Indicación:** {med.get('indicacion')}")
                 if med.get("notas"):
@@ -817,6 +875,70 @@ class MedicinasController:
                 if st.button("🗑️ Eliminar", key=f"del_med_{key}"):
                     self.model.eliminar(key)
                     st.rerun()
+
+    @staticmethod
+    def _med_activa(med):
+        if med.get("tipo") == "continuo":
+            return True
+        dr = MedicinaModel.dias_restantes(med.get("fecha_recojo"), med.get("dias"), med.get("tipo", "temporal"))
+        return dr is None or dr >= 0
+
+    def render_resumen_historial(self, persona_names):
+        """Resumen de medicinas por persona para integrarlo en el historial clínico."""
+        views.render_section_header("💊", "Medicinas por Persona", "Tratamientos continuos y temporales que cada persona debe tomar.")
+        medicinas = self.model.get_all()
+        if not medicinas:
+            st.caption("Aún no hay medicinas registradas para ninguna persona.")
+            return
+
+        por_persona = {}
+        for key, med in medicinas.items():
+            por_persona.setdefault(med.get("paciente", "—"), []).append((key, med))
+
+        def _orden(pair):
+            med = pair[1]
+            if med.get("tipo") == "continuo":
+                return (0, 0)
+            dr = MedicinaModel.dias_restantes(med.get("fecha_recojo"), med.get("dias"), med.get("tipo", "temporal"))
+            return (1, dr if dr is not None else 99999)
+
+        for persona in persona_names:
+            items = por_persona.get(persona)
+            if not items:
+                continue
+            items = sorted(items, key=_orden)
+            activos = sum(1 for _, m in items if self._med_activa(m))
+            with st.expander(f"💊 {persona} — {len(items)} medicamento(s) · {activos} activo(s)"):
+                for key, med in items:
+                    tipo = med.get("tipo", "temporal")
+                    cabecera = f"**{med.get('medicamento', '—')}**"
+                    if med.get("presentacion"):
+                        cabecera += f" · {med.get('presentacion')}"
+                    st.markdown(cabecera)
+                    st.markdown(
+                        views.badge_medicina_estado(
+                            med.get('fecha_recojo'), med.get('dias'), med.get('paciente'), tipo
+                        ),
+                        unsafe_allow_html=True,
+                    )
+                    detalles = []
+                    if med.get("cantidad"):
+                        detalles.append(f"⚖️ {med.get('cantidad')}")
+                    if med.get("frecuencia"):
+                        detalles.append(f"🕐 {med.get('frecuencia')}")
+                    if detalles:
+                        st.caption(" · ".join(detalles))
+                    if tipo == "continuo":
+                        st.caption(f"🔁 Continuo · desde {med.get('fecha_recojo')}")
+                    else:
+                        dr = MedicinaModel.dias_restantes(med.get('fecha_recojo'), med.get('dias'), tipo)
+                        extra = ""
+                        if dr is not None:
+                            extra = f" · quedan {dr} día(s)" if dr >= 0 else f" · agotada hace {abs(dr)} día(s)"
+                        st.caption(f"📆 Temporal · {med.get('dias')} días{extra}")
+                    if med.get("indicacion"):
+                        st.caption(f"💡 {med.get('indicacion')}")
+                    st.divider()
 
 
 # -------------------------------------------------------------
