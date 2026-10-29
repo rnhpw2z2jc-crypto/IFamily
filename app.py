@@ -178,10 +178,13 @@ views.render_kpis(
 # -------------------------------------------------------------
 alertas = views.obtener_alertas(cita_model, persona_model, medicina_model)
 
-# Notificación push del sistema (PWA)
+# Pop-up al abrir la app con la cita más próxima
+views.render_proxima_cita_popup(proxima_cita)
+
+# Notificación del sistema (PWA) — prioriza la cita más próxima
 if "alertas_enviadas" not in st.session_state:
     st.session_state.alertas_enviadas = ""
-views.inject_notificacion_script(alertas)
+views.inject_notificacion_script(alertas, proxima_cita)
 
 if alertas:
     views.render_alerta_panel(alertas)

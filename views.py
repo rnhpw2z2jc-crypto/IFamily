@@ -1157,15 +1157,26 @@ def render_alerta_panel(alertas):
     st.markdown(panel_html, unsafe_allow_html=True)
 
 
-def inject_notificacion_script(alertas):
-    """Inyecta JS para notificaciones push del sistema usando la PWA (cuando la app está abierta)."""
-    if not alertas:
-        return
-
+def inject_notificacion_script(alertas, proxima_cita=None):
+    """Notificación del sistema (PWA) al abrir la app. Prioriza la cita más próxima."""
+    import json
     import streamlit.components.v1 as components
 
-    titular = alertas[0].get("titulo", "iFamily")
-    detalle = alertas[0].get("detalle", "")
+    if proxima_cita:
+        titular = "📅 Próxima cita"
+        detalle = (
+            f"{proxima_cita.get('paciente', '')} — {proxima_cita.get('especialidad', '')} · "
+            f"{proxima_cita.get('fecha', '')} {proxima_cita.get('hora', '')}"
+        ).strip()
+    elif alertas:
+        titular = alertas[0].get("titulo", "iFamily")
+        detalle = alertas[0].get("detalle", "")
+    else:
+        return
+
+    # json.dumps evita romper el JS con comillas o saltos de línea en los datos.
+    titulo_js = json.dumps(f"iFamily · {titular}")
+    detalle_js = json.dumps(detalle)
 
     script = f"""
     <script>
@@ -1176,13 +1187,13 @@ def inject_notificacion_script(alertas):
                     sessionStorage.setItem('ifamily_notif', '1');
                     setTimeout(function() {{
                         try {{
-                            new Notification('iFamily · {_sanitize(titular)}', {{
-                                body: '{_sanitize(detalle)}',
+                            new Notification({titulo_js}, {{
+                                body: {detalle_js},
                                 icon: './icon-192.png',
-                                tag: 'ifamily-alerta'
+                                tag: 'ifamily-cita'
                             }});
                         }} catch(e) {{}}
-                    }}, 1500);
+                    }}, 1200);
                 }}
             }});
         }}
@@ -1190,3 +1201,37 @@ def inject_notificacion_script(alertas):
     </script>
     """
     components.html(script, height=0, width=0)
+
+
+@st.dialog("📅 Tu próxima cita")
+def _dialog_proxima_cita(cita):
+    """Contenido del pop-up con la cita más próxima."""
+    estado_txt, estado_clase = CitaModel.estado_visual(cita.get("fecha"))
+    st.markdown(
+        f"<div style='font-size:1.1rem; font-weight:800; margin-bottom:8px;'>"
+        f"{_sanitize(cita.get('paciente', '—'))} · {_sanitize(cita.get('especialidad', '—'))}</div>",
+        unsafe_allow_html=True,
+    )
+    if estado_txt:
+        st.markdown(
+            f'<span class="badge {estado_clase}">{_sanitize(estado_txt)}</span>',
+            unsafe_allow_html=True,
+        )
+    st.markdown(f"**🏥 Lugar:** {_sanitize(cita.get('lugar', '—'))}")
+    st.markdown(f"**📆 Fecha:** {_sanitize(cita.get('fecha', '—'))}")
+    if cita.get("hora"):
+        st.markdown(f"**🕐 Hora:** {_sanitize(cita.get('hora'))}")
+    if cita.get("notas"):
+        st.markdown(f"**📝 Notas:** {_sanitize(cita.get('notas'))}")
+    if st.button("👍 Entendido", use_container_width=True, key="dlg_proxima_cita_ok"):
+        st.rerun()
+
+
+def render_proxima_cita_popup(proxima_cita):
+    """Pop-up con la cita más próxima al abrir la app (una vez por sesión)."""
+    if not proxima_cita:
+        return
+    if st.session_state.get("_proxima_cita_popup_mostrado"):
+        return
+    st.session_state["_proxima_cita_popup_mostrado"] = True
+    _dialog_proxima_cita(proxima_cita)
