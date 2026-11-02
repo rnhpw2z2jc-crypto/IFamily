@@ -37,6 +37,7 @@ secrets.toml
 firebase_key.json
 *.json
 !.streamlit/static/manifest.json
+!static/manifest.json
 
 # Logs
 *.log
