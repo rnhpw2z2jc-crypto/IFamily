@@ -765,48 +765,131 @@ def inject_css():
         margin: 0 0 12px 0;
     }
 
-    [data-testid="stVerticalBlockBorderWrapper"],
-    [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .tile):not([data-testid="stVerticalBlockBorderWrapper"] *) {
-        border-radius: 18px !important;
-        transition: transform 0.18s ease, box-shadow 0.18s ease,
-                    border-color 0.18s ease;
+    /* Tarjeta = wrapper interno que contiene directamente el contenido .tile.
+       Streamlit 1.45 anida un wrapper extra por columna; ese se neutraliza
+       más abajo para que no se vea un doble borde. */
+    [data-testid="stVerticalBlockBorderWrapper"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] .tile) {
+        position: relative !important;
+        overflow: hidden !important;
+        border-radius: 16px !important;
+        border: 1px solid rgba(15, 23, 42, 0.08) !important;
+        background: rgba(255, 255, 255, 0.8) !important;
+        box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05) !important;
+        -webkit-tap-highlight-color: transparent;
+        transition: transform 0.14s ease, box-shadow 0.14s ease,
+                    border-color 0.14s ease;
     }
-    [data-testid="stVerticalBlockBorderWrapper"]:hover,
-    [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .tile):not([data-testid="stVerticalBlockBorderWrapper"] *):hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 28px rgba(0, 188, 212, 0.18);
+    [data-testid="stVerticalBlockBorderWrapper"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] .tile) > [data-testid="stVerticalBlock"] {
+        position: static !important;
+        height: 100%;
+        padding: 0 !important;
+    }
+    /* El botón real se estira sobre toda la tarjeta y queda transparente:
+       se puede pulsar en el icono, el título, el texto o el espacio libre. */
+    [data-testid="stVerticalBlockBorderWrapper"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] .tile) [data-testid="stElementContainer"]:has(> [data-testid="stButton"]) {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 4;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] .tile) [data-testid="stButton"],
+    [data-testid="stVerticalBlockBorderWrapper"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] .tile) [data-testid="stButton"] > button {
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] .tile) [data-testid="stButton"] > button {
+        opacity: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        cursor: pointer;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] .tile):hover {
+        transform: translateY(-2px);
+        border-color: rgba(0, 188, 212, 0.55) !important;
+        box-shadow: 0 8px 20px rgba(0, 188, 212, 0.15) !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] .tile):has([data-testid="stButton"] > button:active) {
+        transform: scale(0.985);
+        box-shadow: 0 2px 6px rgba(0, 188, 212, 0.12) !important;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] .tile):has([data-testid="stButton"] > button:focus-visible) {
         border-color: var(--primary) !important;
+        box-shadow: 0 0 0 3px rgba(0, 188, 212, 0.35) !important;
+    }
+    /* Wrapper externo que anida Streamlit: sin borde ni sombra. */
+    [data-testid="stVerticalBlockBorderWrapper"]:has(.tile):has(> [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"]) {
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        transform: none !important;
     }
     .tile {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
         text-align: center;
-        padding: 10px 6px 2px 6px;
+        height: 100%;
+        padding: 14px 8px 6px 8px;
     }
     .tile-icon {
-        font-size: 2.6rem;
-        line-height: 1.1;
-        margin-bottom: 6px;
+        font-size: 2.35rem;
+        line-height: 1;
+        margin-bottom: 5px;
+        transition: transform 0.14s ease;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"] .tile):hover .tile-icon {
+        transform: scale(1.08);
     }
     .tile-title {
-        font-size: 1.02rem;
+        font-size: 1rem;
         font-weight: 800;
         color: #0F172A;
+        line-height: 1.2;
     }
     .tile-desc {
-        font-size: 0.8rem;
+        font-size: 0.78rem;
         color: var(--text-muted);
         margin-top: 2px;
-        min-height: 34px;
+        min-height: 32px;
     }
     .tile-badge {
         display: inline-block;
-        margin-top: 8px;
-        padding: 3px 10px;
+        margin-top: 6px;
+        padding: 3px 9px;
         border-radius: 999px;
-        font-size: 0.72rem;
+        font-size: 0.7rem;
         font-weight: 800;
-        background: rgba(0, 188, 212, 0.12);
+        background: rgba(0, 188, 212, 0.1);
         color: #00838F;
-        border: 1px solid rgba(0, 188, 212, 0.25);
+        border: 1px solid rgba(0, 188, 212, 0.22);
+    }
+
+    /* Móvil: misma cuadrícula de 2 columnas y tarjetas compactas. */
+    @media (max-width: 640px) {
+        [data-testid="stMainBlockContainer"] {
+            padding-left: 0.7rem !important;
+            padding-right: 0.7rem !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.tile) {
+            flex-wrap: nowrap !important;
+            gap: 0.55rem !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(.tile) > [data-testid="stColumn"] {
+            width: 50% !important;
+            flex: 1 1 50% !important;
+            min-width: 0 !important;
+        }
+        .tile { padding: 12px 4px 4px 4px; }
+        .tile-icon { font-size: 2rem; }
+        .tile-title { font-size: 0.9rem; }
+        .tile-desc { font-size: 0.72rem; min-height: 30px; }
+        .tile-badge { font-size: 0.66rem; padding: 2px 7px; }
+        .home-grid-title { font-size: 1.02rem; }
+        .home-grid-sub { font-size: 0.78rem; margin-bottom: 8px; }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -1112,7 +1195,8 @@ def render_section_header(icon, title, description=""):
 def render_seccion_tile(icono, titulo, descripcion, key, badge=""):
     """Tarjeta de acceso de la cuadrícula del inicio.
 
-    Devuelve True si el usuario pulsó "Abrir".
+    Toda la tarjeta es clicable: el botón real se estira sobre ella y queda
+    transparente (ver CSS de `.home-grid`). Devuelve True si se pulsó.
     """
     badge_html = f'<div class="tile-badge">{_sanitize(badge)}</div>' if badge else ""
     with st.container(border=True):
@@ -1125,17 +1209,26 @@ def render_seccion_tile(icono, titulo, descripcion, key, badge=""):
             f'</div>',
             unsafe_allow_html=True,
         )
-        return st.button("Abrir", key=f"tile_{key}", use_container_width=True)
+        return st.button(
+            f"Abrir {titulo}",
+            key=f"tile_{key}",
+            use_container_width=True,
+        )
 
 
 # -------------------------------------------------------------
 # ALERTAS
 # -------------------------------------------------------------
-def obtener_alertas(cita_model, persona_model, medicina_model=None):
-    """Calcula alertas de seguimiento: citas próximas, emergencias, citas atrasadas, medicinas por agotar."""
+def obtener_alertas(cita_model, persona_model, medicina_model=None, citas=None,
+                    medicinas_proximas=None):
+    """Calcula alertas de seguimiento: citas próximas, emergencias, citas atrasadas, medicinas por agotar.
+
+    Permite reutilizar datos ya leídos (`citas`, `medicinas_proximas`) para no
+    repetir consultas a Firebase en cada render.
+    """
     alertas = []
     hoy = date.today()
-    citas = cita_model.get_all()
+    citas = citas if citas is not None else cita_model.get_all()
 
     for key, cita in citas.items():
         estado = cita.get("estado", "programada")
@@ -1185,7 +1278,9 @@ def obtener_alertas(cita_model, persona_model, medicina_model=None):
             })
 
     if medicina_model is not None:
-        for key, med in medicina_model.get_proximas_a_agotar(3).items():
+        proximas = (medicinas_proximas if medicinas_proximas is not None
+                    else medicina_model.get_proximas_a_agotar(3))
+        for key, med in proximas.items():
             dias_rest = MedicinaModel.dias_restantes(med.get("fecha_recojo"), med.get("dias"))
             if dias_rest is not None and dias_rest < 0:
                 detalle = f"{med.get('medicamento')} — {med.get('paciente')} — se agotó hace {abs(dias_rest)} día(s)"

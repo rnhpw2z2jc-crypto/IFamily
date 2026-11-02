@@ -31,7 +31,7 @@ st.set_page_config(
 st.markdown("""
 <link rel="manifest" href="app/static/manifest.json">
 <meta name="theme-color" content="#00BCD4">
-<div id="ifamily-version" data-version="2.2-pwa-static" style="display:none;"></div>
+<div id="ifamily-version" data-version="2.4-tiles-full-click" style="display:none;"></div>
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="apple-touch-icon" href="app/static/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -154,20 +154,6 @@ familia_data = family_model.get_familia(familia_id)
 nombre_familia = familia_data.get("nombre", "Mi Familia")
 
 # -------------------------------------------------------------
-# DATOS DEL INICIO
-# -------------------------------------------------------------
-_, proxima_cita = cita_model.proxima_cita()
-alertas = views.obtener_alertas(cita_model, persona_model, medicina_model)
-
-# Pop-up al abrir la app con la cita más próxima
-views.render_proxima_cita_popup(proxima_cita)
-
-# Notificación del sistema (PWA) — prioriza la cita más próxima
-if "alertas_enviadas" not in st.session_state:
-    st.session_state.alertas_enviadas = ""
-views.inject_notificacion_script(alertas, proxima_cita)
-
-# -------------------------------------------------------------
 # CONTROLLERS
 # -------------------------------------------------------------
 citas_controller = CitasController(cita_model)
@@ -175,8 +161,6 @@ servicios_controller = ServiciosController(servicio_model)
 family_controller = FamilyController(family_model, user_model)
 personas_controller = PersonasController(persona_model)
 medicinas_controller = MedicinasController(medicina_model)
-
-persona_names = persona_model.nombres()
 
 # -------------------------------------------------------------
 # NAVEGACIÓN POR PANTALLAS (sin recargar la app)
@@ -210,13 +194,44 @@ def render_header():
 def render_home():
     render_header()
 
+    # Se leen los datos una sola vez y se reutilizan (menos consultas a Firebase).
+    citas_all = cita_model.get_all()
+    medicinas_all = medicina_model.get_all()
+    servicios_all = servicio_model.get_all()
+    personas_all = persona_model.get_all()
+
+    programadas = cita_model.get_programadas(data=citas_all)
+    emergencias = cita_model.get_emergencias(data=citas_all)
+    medicinas_activas = medicina_model.get_activas(data=medicinas_all)
+    medicinas_por_agotar = medicina_model.get_proximas_a_agotar(3, data=medicinas_all)
+
+    proxima_cita = None
+    if programadas:
+        _, proxima_cita = sorted(
+            programadas.items(),
+            key=lambda i: (i[1].get("fecha", ""), i[1].get("hora", "")),
+        )[0]
+
+    alertas = views.obtener_alertas(
+        cita_model, persona_model, medicina_model,
+        citas=citas_all, medicinas_proximas=medicinas_por_agotar,
+    )
+
+    # Pop-up al abrir la app con la cita más próxima
+    views.render_proxima_cita_popup(proxima_cita)
+
+    # Notificación del sistema (PWA) — prioriza la cita más próxima
+    if "alertas_enviadas" not in st.session_state:
+        st.session_state.alertas_enviadas = ""
+    views.inject_notificacion_script(alertas, proxima_cita)
+
     # Resumen (KPIs) arriba
     views.render_kpis(
-        total_citas_programadas=len(cita_model.get_programadas()),
+        total_citas_programadas=len(programadas),
         proxima_cita=proxima_cita,
-        total_servicios=len(servicio_model.get_all()),
-        total_emergencias=len(cita_model.get_emergencias()),
-        medicinas_por_agotar=len(medicina_model.get_proximas_a_agotar(3)),
+        total_servicios=len(servicios_all),
+        total_emergencias=len(emergencias),
+        medicinas_por_agotar=len(medicinas_por_agotar),
     )
 
     # Panel de alertas debajo del resumen
@@ -231,28 +246,25 @@ def render_home():
         unsafe_allow_html=True,
     )
 
-    citas_pendientes = len(cita_model.get_programadas())
-    medicinas_activas = len(medicina_model.get_activas())
-
     secciones = [
         {"key": "citas", "icono": "📅", "titulo": "Citas Médicas",
          "desc": "Agenda, pendientes y realizadas",
-         "badge": f"{citas_pendientes} pendiente(s)" if citas_pendientes else "Sin pendientes"},
+         "badge": f"{len(programadas)} pendiente(s)" if programadas else "Sin pendientes"},
         {"key": "emergencias", "icono": "🚨", "titulo": "Emergencias",
          "desc": "Registra y consulta emergencias",
-         "badge": f"{len(cita_model.get_emergencias())} registrada(s)"},
+         "badge": f"{len(emergencias)} registrada(s)"},
         {"key": "historial", "icono": "📖", "titulo": "Historial Clínico",
          "desc": "Citas realizadas y medicinas",
          "badge": "Ver historial"},
         {"key": "medicinas", "icono": "💊", "titulo": "Medicinas",
          "desc": "Recetas continuas y temporales",
-         "badge": f"{medicinas_activas} activa(s)"},
+         "badge": f"{len(medicinas_activas)} activa(s)"},
         {"key": "servicios", "icono": "💡", "titulo": "Servicios Públicos",
          "desc": "Luz, agua, gas e internet",
-         "badge": f"{len(servicio_model.get_all())} código(s)"},
+         "badge": f"{len(servicios_all)} código(s)"},
         {"key": "personas", "icono": "👤", "titulo": "Personas",
          "desc": "Personas de seguimiento",
-         "badge": f"{len(persona_names)} registrada(s)"},
+         "badge": f"{len(personas_all)} registrada(s)"},
         {"key": "familia", "icono": "👥", "titulo": "Mi Familia",
          "desc": "Miembros y gestión familiar",
          "badge": nombre_familia},
@@ -278,6 +290,7 @@ def render_volver(key="btn_volver_home"):
 def render_vista_actual():
     render_header()
     render_volver("btn_volver_home_top")
+    persona_names = persona_model.nombres()
 
     if vista == "citas":
         col_c_action, col_c_info = st.columns([1, 2])

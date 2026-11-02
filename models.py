@@ -348,14 +348,16 @@ class CitaModel:
         data = self.ref.get() if self.ref else None
         return data or {}
 
-    def get_programadas(self):
-        return {k: v for k, v in self.get_all().items() if v.get("estado", "programada") == "programada"}
+    def get_programadas(self, data=None):
+        data = self.get_all() if data is None else data
+        return {k: v for k, v in data.items() if v.get("estado", "programada") == "programada"}
 
     def get_realizadas(self):
         return {k: v for k, v in self.get_all().items() if v.get("estado") == "realizada"}
 
-    def get_emergencias(self):
-        return {k: v for k, v in self.get_all().items() if v.get("es_emergencia")}
+    def get_emergencias(self, data=None):
+        data = self.get_all() if data is None else data
+        return {k: v for k, v in data.items() if v.get("es_emergencia")}
 
     def get_no_emergencias(self):
         return {k: v for k, v in self.get_all().items() if not v.get("es_emergencia")}
@@ -559,11 +561,12 @@ class MedicinaModel:
     def eliminar(self, key):
         self.ref.child(key).delete()
 
-    def get_proximas_a_agotar(self, dias_limite=3):
+    def get_proximas_a_agotar(self, dias_limite=3, data=None):
         """Medicinas temporales que se agotan en <= dias_limite o ya están agotadas.
         Los tratamientos continuos no se agotan por días, por lo que se omiten."""
+        data = self.get_all() if data is None else data
         proximas = {}
-        for k, v in self.get_all().items():
+        for k, v in data.items():
             if v.get("tipo") == "continuo":
                 continue
             dias_rest = self.dias_restantes(v.get("fecha_recojo"), v.get("dias"), v.get("tipo"))
@@ -571,10 +574,11 @@ class MedicinaModel:
                 proximas[k] = v
         return proximas
 
-    def get_activas(self):
+    def get_activas(self, data=None):
         """Medicinas que la persona todavía debe tomar: continuas o temporales no agotadas."""
+        data = self.get_all() if data is None else data
         activas = {}
-        for k, v in self.get_all().items():
+        for k, v in data.items():
             if v.get("tipo") == "continuo":
                 activas[k] = v
                 continue
