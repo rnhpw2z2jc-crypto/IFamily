@@ -152,30 +152,10 @@ nombre_usuario = user_data.get("nombre", "Sin nombre")
 familia_data = family_model.get_familia(familia_id)
 nombre_familia = familia_data.get("nombre", "Mi Familia")
 
-st.markdown(f"""
-<div style="margin-bottom:8px;">
-    <h1 style="margin:0; font-size:1.6rem;">🏠 {_sanitize(nombre_familia)}</h1>
-    <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:0.9rem;">
-        Bienvenido, <strong>{_sanitize(nombre_usuario)}</strong> — Control familiar inteligente
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
 # -------------------------------------------------------------
-# KPIs
+# DATOS DEL INICIO
 # -------------------------------------------------------------
 _, proxima_cita = cita_model.proxima_cita()
-views.render_kpis(
-    total_citas_programadas=len(cita_model.get_programadas()),
-    proxima_cita=proxima_cita,
-    total_servicios=len(servicio_model.get_all()),
-    total_emergencias=len(cita_model.get_emergencias()),
-    medicinas_por_agotar=len(medicina_model.get_proximas_a_agotar(3)),
-)
-
-# -------------------------------------------------------------
-# ALERTAS
-# -------------------------------------------------------------
 alertas = views.obtener_alertas(cita_model, persona_model, medicina_model)
 
 # Pop-up al abrir la app con la cita más próxima
@@ -186,24 +166,9 @@ if "alertas_enviadas" not in st.session_state:
     st.session_state.alertas_enviadas = ""
 views.inject_notificacion_script(alertas, proxima_cita)
 
-if alertas:
-    views.render_alerta_panel(alertas)
-
-st.write("")
-
 # -------------------------------------------------------------
-# TABS PRINCIPALES
+# CONTROLLERS
 # -------------------------------------------------------------
-tab_citas, tab_emergencias, tab_historial, tab_medicinas, tab_servicios, tab_personas, tab_familia = st.tabs([
-    "📅 Citas Médicas",
-    "🚨 Emergencias",
-    "📖 Historial Clínico",
-    "💊 Medicinas",
-    "💡 Servicios Públicos",
-    "👤 Personas",
-    "👥 Mi Familia",
-])
-
 citas_controller = CitasController(cita_model)
 servicios_controller = ServiciosController(servicio_model)
 family_controller = FamilyController(family_model, user_model)
@@ -213,74 +178,163 @@ medicinas_controller = MedicinasController(medicina_model)
 persona_names = persona_model.nombres()
 
 # -------------------------------------------------------------
-# TAB: CITAS MÉDICAS
+# NAVEGACIÓN POR PANTALLAS (sin recargar la app)
 # -------------------------------------------------------------
-with tab_citas:
-    col_c_action, col_c_info = st.columns([1, 2])
-    with col_c_action:
-        citas_controller.render_form_agendar(nombre_usuario, persona_names)
-    with col_c_info:
-        st.caption("Las citas registradas se suman al historial clínico de la persona para un control completo.")
+VISTAS_VALIDAS = {
+    "home", "citas", "emergencias", "historial",
+    "medicinas", "servicios", "personas", "familia",
+}
+if st.session_state.get("vista") not in VISTAS_VALIDAS:
+    st.session_state.vista = "home"
+vista = st.session_state.vista
 
-    citas_controller.render_lista_programadas(nombre_usuario, persona_names)
 
-# -------------------------------------------------------------
-# TAB: EMERGENCIAS
-# -------------------------------------------------------------
-with tab_emergencias:
-    col_e_action, col_e_info = st.columns([1, 2])
-    with col_e_action:
-        citas_controller.render_form_registrar_emergencia(nombre_usuario, persona_names)
-    with col_e_info:
-        st.caption("Las emergencias registradas se agregan automáticamente al historial clínico de la persona seleccionada.")
+def ir_a(destino):
+    """Cambia de pantalla conservando la sesión de login."""
+    st.session_state.vista = destino
+    st.rerun()
 
-    citas_controller.render_lista_emergencias(persona_names)
 
-# -------------------------------------------------------------
-# TAB: HISTORIAL CLÍNICO
-# -------------------------------------------------------------
-with tab_historial:
-    medicinas_controller.render_resumen_historial(persona_names)
+def render_header():
+    st.markdown(f"""
+    <div style="margin-bottom:8px;">
+        <h1 style="margin:0; font-size:1.6rem;">🏠 {_sanitize(nombre_familia)}</h1>
+        <p style="color:var(--text-muted); margin:4px 0 0 0; font-size:0.9rem;">
+            Bienvenido, <strong>{_sanitize(nombre_usuario)}</strong> — Control familiar inteligente
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def render_home():
+    render_header()
+
+    # Resumen (KPIs) arriba
+    views.render_kpis(
+        total_citas_programadas=len(cita_model.get_programadas()),
+        proxima_cita=proxima_cita,
+        total_servicios=len(servicio_model.get_all()),
+        total_emergencias=len(cita_model.get_emergencias()),
+        medicinas_por_agotar=len(medicina_model.get_proximas_a_agotar(3)),
+    )
+
+    # Panel de alertas debajo del resumen
+    if alertas:
+        views.render_alerta_panel(alertas)
+    else:
+        st.success("✅ Todo en orden: no hay alertas pendientes.")
+
+    st.markdown(
+        '<div class="home-grid-title">🧭 Accesos rápidos</div>'
+        '<div class="home-grid-sub">Toca una tarjeta para abrir su pantalla.</div>',
+        unsafe_allow_html=True,
+    )
+
+    citas_pendientes = len(cita_model.get_programadas())
+    medicinas_activas = len(medicina_model.get_activas())
+
+    secciones = [
+        {"key": "citas", "icono": "📅", "titulo": "Citas Médicas",
+         "desc": "Agenda, pendientes y realizadas",
+         "badge": f"{citas_pendientes} pendiente(s)" if citas_pendientes else "Sin pendientes"},
+        {"key": "emergencias", "icono": "🚨", "titulo": "Emergencias",
+         "desc": "Registra y consulta emergencias",
+         "badge": f"{len(cita_model.get_emergencias())} registrada(s)"},
+        {"key": "historial", "icono": "📖", "titulo": "Historial Clínico",
+         "desc": "Citas realizadas y medicinas",
+         "badge": "Ver historial"},
+        {"key": "medicinas", "icono": "💊", "titulo": "Medicinas",
+         "desc": "Recetas continuas y temporales",
+         "badge": f"{medicinas_activas} activa(s)"},
+        {"key": "servicios", "icono": "💡", "titulo": "Servicios Públicos",
+         "desc": "Luz, agua, gas e internet",
+         "badge": f"{len(servicio_model.get_all())} código(s)"},
+        {"key": "personas", "icono": "👤", "titulo": "Personas",
+         "desc": "Personas de seguimiento",
+         "badge": f"{len(persona_names)} registrada(s)"},
+        {"key": "familia", "icono": "👥", "titulo": "Mi Familia",
+         "desc": "Miembros y gestión familiar",
+         "badge": nombre_familia},
+    ]
+
+    # Cuadrícula de 2 columnas (4 filas con 7 opciones)
+    for i in range(0, len(secciones), 2):
+        cols = st.columns(2)
+        for col, seccion in zip(cols, secciones[i:i + 2]):
+            with col:
+                if views.render_seccion_tile(
+                    seccion["icono"], seccion["titulo"], seccion["desc"],
+                    seccion["key"], seccion.get("badge", ""),
+                ):
+                    ir_a(seccion["key"])
+
+
+def render_volver(key="btn_volver_home"):
+    if st.button("← Volver al inicio", key=key):
+        ir_a("home")
+
+
+def render_vista_actual():
+    render_header()
+    render_volver("btn_volver_home_top")
+
+    if vista == "citas":
+        col_c_action, col_c_info = st.columns([1, 2])
+        with col_c_action:
+            citas_controller.render_form_agendar(nombre_usuario, persona_names)
+        with col_c_info:
+            st.caption("Las citas registradas se suman al historial clínico de la persona para un control completo.")
+        citas_controller.render_lista_programadas(nombre_usuario, persona_names)
+
+    elif vista == "emergencias":
+        col_e_action, col_e_info = st.columns([1, 2])
+        with col_e_action:
+            citas_controller.render_form_registrar_emergencia(nombre_usuario, persona_names)
+        with col_e_info:
+            st.caption("Las emergencias registradas se agregan automáticamente al historial clínico de la persona seleccionada.")
+        citas_controller.render_lista_emergencias(persona_names)
+
+    elif vista == "historial":
+        medicinas_controller.render_resumen_historial(persona_names)
+        st.markdown("")
+        citas_controller.render_historial(persona_names)
+
+    elif vista == "medicinas":
+        col_m_action, col_m_info = st.columns([1, 2])
+        with col_m_action:
+            medicinas_controller.render_form_registrar(nombre_usuario, persona_names)
+        with col_m_info:
+            st.caption("Registra cada recogida de medicinas con dosis, frecuencia y duración del tratamiento.")
+        medicinas_controller.render_lista(persona_names)
+
+    elif vista == "servicios":
+        views.render_section_header("💡", "Servicios Públicos y Facturas", "Códigos de pago de luz, agua, gas e internet.")
+
+        col_filter, col_action = st.columns([3, 1])
+        with col_filter:
+            filtro_tipo = ServiciosController.render_filtro_tipo()
+        with col_action:
+            servicios_controller.render_form_registrar(nombre_usuario)
+
+        servicios_controller.render_lista(filtro_tipo)
+
+    elif vista == "personas":
+        views.render_section_header("👤", "Personas de Seguimiento", "Agrega a quienes deseas hacer seguimiento.")
+
+        personas_controller.render_form_crear(nombre_usuario)
+        personas_controller.render_lista()
+
+    elif vista == "familia":
+        family_controller.render_family_panel(familia_id, user_id)
+
     st.markdown("")
-    citas_controller.render_historial(persona_names)
+    render_volver("btn_volver_home_bottom")
+
 
 # -------------------------------------------------------------
-# TAB: MEDICINAS
+# RENDER DE LA PANTALLA ACTIVA
 # -------------------------------------------------------------
-with tab_medicinas:
-    col_m_action, col_m_info = st.columns([1, 2])
-    with col_m_action:
-        medicinas_controller.render_form_registrar(nombre_usuario, persona_names)
-    with col_m_info:
-        st.caption("Registra cada recogida de medicinas con su duración para saber cuándo debes volver a comprar.")
-
-    medicinas_controller.render_lista(persona_names)
-
-# -------------------------------------------------------------
-# TAB: SERVICIOS PÚBLICOS
-# -------------------------------------------------------------
-with tab_servicios:
-    views.render_section_header("💡", "Servicios Públicos y Facturas", "Códigos de pago de luz, agua, gas e internet.")
-
-    col_filter, col_action = st.columns([3, 1])
-    with col_filter:
-        filtro_tipo = ServiciosController.render_filtro_tipo()
-    with col_action:
-        servicios_controller.render_form_registrar(nombre_usuario)
-
-    servicios_controller.render_lista(filtro_tipo)
-
-# -------------------------------------------------------------
-# TAB: PERSONAS DE SEGUIMIENTO
-# -------------------------------------------------------------
-with tab_personas:
-    views.render_section_header("👤", "Personas de Seguimiento", "Agrega a quienes deseas hacer seguimiento.")
-
-    personas_controller.render_form_crear(nombre_usuario)
-    personas_controller.render_lista()
-
-# -------------------------------------------------------------
-# TAB: MI FAMILIA
-# -------------------------------------------------------------
-with tab_familia:
-    family_controller.render_family_panel(familia_id, user_id)
+if vista == "home":
+    render_home()
+else:
+    render_vista_actual()

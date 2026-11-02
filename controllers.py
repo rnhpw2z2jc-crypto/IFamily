@@ -185,7 +185,11 @@ class AuthController:
         return True
 
     def logout(self):
-        for key in ["user_id", "nombre_usuario", "familia_activa", "familia_id", "login_time"]:
+        for key in [
+            "user_id", "nombre_usuario", "familia_activa", "familia_id",
+            "login_time", "vista", "_proxima_cita_popup_mostrado",
+            "alertas_enviadas",
+        ]:
             st.session_state.pop(key, None)
         st.rerun()
 
@@ -231,6 +235,10 @@ class AuthController:
                 st.session_state.familia_id = ""
 
             st.divider()
+
+            if st.button("🏠 Inicio", use_container_width=True, key="sidebar_home"):
+                st.session_state.vista = "home"
+                st.rerun()
 
             if st.button("🚪 Cerrar Sesión", use_container_width=True):
                 self.logout()

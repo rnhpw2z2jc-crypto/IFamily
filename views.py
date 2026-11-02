@@ -750,6 +750,64 @@ def inject_css():
     .alerta-item:last-child { border-bottom: none; }
     .alerta-titulo { font-weight: 700; color: #1F2937; font-size: 0.92rem; }
     .alerta-detalle { color: #6B7280; font-size: 0.84rem; }
+
+    /* ---------------------------------------------------------
+       HOME: CUADRÍCULA DE ACCESOS
+    --------------------------------------------------------- */
+    .home-grid-title {
+        display: flex; align-items: center; gap: 10px;
+        font-size: 1.15rem; font-weight: 900;
+        margin: 8px 0 2px 0;
+    }
+    .home-grid-sub {
+        color: var(--text-muted);
+        font-size: 0.85rem;
+        margin: 0 0 12px 0;
+    }
+
+    [data-testid="stVerticalBlockBorderWrapper"],
+    [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .tile):not([data-testid="stVerticalBlockBorderWrapper"] *) {
+        border-radius: 18px !important;
+        transition: transform 0.18s ease, box-shadow 0.18s ease,
+                    border-color 0.18s ease;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:hover,
+    [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] .tile):not([data-testid="stVerticalBlockBorderWrapper"] *):hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 28px rgba(0, 188, 212, 0.18);
+        border-color: var(--primary) !important;
+    }
+    .tile {
+        text-align: center;
+        padding: 10px 6px 2px 6px;
+    }
+    .tile-icon {
+        font-size: 2.6rem;
+        line-height: 1.1;
+        margin-bottom: 6px;
+    }
+    .tile-title {
+        font-size: 1.02rem;
+        font-weight: 800;
+        color: #0F172A;
+    }
+    .tile-desc {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin-top: 2px;
+        min-height: 34px;
+    }
+    .tile-badge {
+        display: inline-block;
+        margin-top: 8px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 800;
+        background: rgba(0, 188, 212, 0.12);
+        color: #00838F;
+        border: 1px solid rgba(0, 188, 212, 0.25);
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -1046,6 +1104,28 @@ def render_section_header(icon, title, description=""):
         {'<p style="color:var(--text-muted); font-size:0.9rem; margin:0;">' + _sanitize(description) + '</p>' if description else ''}
     </div>
     """, unsafe_allow_html=True)
+
+
+# -------------------------------------------------------------
+# HOME: TARJETA DE ACCESO (cuadrícula)
+# -------------------------------------------------------------
+def render_seccion_tile(icono, titulo, descripcion, key, badge=""):
+    """Tarjeta de acceso de la cuadrícula del inicio.
+
+    Devuelve True si el usuario pulsó "Abrir".
+    """
+    badge_html = f'<div class="tile-badge">{_sanitize(badge)}</div>' if badge else ""
+    with st.container(border=True):
+        st.markdown(
+            f'<div class="tile">'
+            f'<div class="tile-icon">{icono}</div>'
+            f'<div class="tile-title">{_sanitize(titulo)}</div>'
+            f'<div class="tile-desc">{_sanitize(descripcion)}</div>'
+            f'{badge_html}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        return st.button("Abrir", key=f"tile_{key}", use_container_width=True)
 
 
 # -------------------------------------------------------------
