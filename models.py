@@ -11,7 +11,7 @@ import os
 import secrets as _secrets_mod
 import tempfile
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import firebase_admin
 from firebase_admin import credentials, db
@@ -20,6 +20,32 @@ try:
     import bcrypt as _bcrypt
 except ImportError:
     _bcrypt = None
+
+
+# -------------------------------------------------------------
+# ZONA HORARIA DE LA FAMILIA
+# -------------------------------------------------------------
+# Los servidores de Streamlit Cloud corren en UTC. Si se usa date.today()
+# por la noche en Perú (UTC-5), el servidor ya cambió de día y una cita
+# de mañana aparece como "HOY". Toda la app usa la hora local.
+_TZ_NOMBRE = os.environ.get("IFAMILY_TZ", "America/Lima")
+try:
+    from zoneinfo import ZoneInfo
+
+    _ZONA_HORARIA = ZoneInfo(_TZ_NOMBRE)
+except Exception:
+    # Perú no usa horario de verano: UTC-5 fijo si no hay datos tzdata.
+    _ZONA_HORARIA = timezone(timedelta(hours=-5))
+
+
+def ahora_local():
+    """Fecha y hora actuales en la zona horaria de la familia."""
+    return datetime.now(_ZONA_HORARIA)
+
+
+def hoy_local():
+    """Fecha de hoy en la zona horaria de la familia (no la del servidor)."""
+    return ahora_local().date()
 
 
 # -------------------------------------------------------------
@@ -389,7 +415,7 @@ class CitaModel:
             "tratamiento": tratamiento,
             "recomendaciones": recomendaciones,
             "proxima_cita_sugerida": str(proxima_sugerida) if proxima_sugerida else "",
-            "fecha_registro_historial": str(date.today()),
+            "fecha_registro_historial": str(hoy_local()),
             "actualizado_por": usuario,
         })
 
@@ -410,9 +436,9 @@ class CitaModel:
             "tratamiento": atencion_recibida,
             "recomendaciones": notas,
             "registrado_por": usuario,
-            "fecha_registro_historial": str(date.today()),
+            "fecha_registro_historial": str(hoy_local()),
             "actualizado_por": usuario,
-            "created_at": str(datetime.now()),
+            "created_at": str(ahora_local()),
         }
         self.ref.push(nueva_emergencia)
 
@@ -425,11 +451,13 @@ class CitaModel:
             f = datetime.strptime(fecha_str, "%Y-%m-%d").date()
         except (ValueError, TypeError):
             return "", ""
-        dias = (f - date.today()).days
+        dias = (f - hoy_local()).days
         if dias < 0:
             return "Atrasada", "badge-atrasada"
         if dias == 0:
             return "Hoy", "badge-hoy"
+        if dias == 1:
+            return "Mañana", "badge-manana"
         if dias <= 7:
             return "Esta semana", "badge-semana"
         return "Próximamente", "badge-proximamente"
@@ -470,7 +498,7 @@ class ServicioModel:
             "codigo": codigo,
             "titular": titular,
             "registrado_por": usuario,
-            "fecha_registro": str(date.today()),
+            "fecha_registro": str(hoy_local()),
         }
         self.ref.push(nuevo_servicio)
 
@@ -593,7 +621,7 @@ class MedicinaModel:
             return None
         try:
             f = datetime.strptime(str(fecha_recojo), "%Y-%m-%d").date()
-            return (f + timedelta(days=int(dias)) - date.today()).days
+            return (f + timedelta(days=int(dias)) - hoy_local()).days
         except (ValueError, TypeError):
             return None
 

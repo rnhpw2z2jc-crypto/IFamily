@@ -8,7 +8,7 @@ CSS, tarjetas, badges, empty states, skeletons.
 import streamlit as st
 from datetime import date, datetime, timedelta
 
-from models import CitaModel, ServicioModel, MedicinaModel, _sanitize
+from models import CitaModel, ServicioModel, MedicinaModel, _sanitize, hoy_local
 
 
 # -------------------------------------------------------------
@@ -354,6 +354,12 @@ def inject_css():
         background: rgba(245, 158, 11, 0.12);
         color: #D97706;
         border-color: rgba(245, 158, 11, 0.25);
+    }
+
+    .badge-manana {
+        background: rgba(245, 158, 11, 0.16);
+        color: #B45309;
+        border-color: rgba(245, 158, 11, 0.35);
     }
 
     .badge-proximamente {
@@ -1794,7 +1800,7 @@ def obtener_alertas(cita_model, persona_model, medicina_model=None, citas=None,
     repetir consultas a Firebase en cada render.
     """
     alertas = []
-    hoy = date.today()
+    hoy = hoy_local()
     citas = citas if citas is not None else cita_model.get_all()
 
     for key, cita in citas.items():

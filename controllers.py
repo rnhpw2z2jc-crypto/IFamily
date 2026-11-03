@@ -14,6 +14,7 @@ from models import (
     FirebaseService, UserModel, FamilyModel,
     CitaModel, ServicioModel, PersonaModel, MedicinaModel,
     get_admin_credentials, _hash_password, _verify_password, _sanitize,
+    hoy_local,
 )
 import views
 
@@ -496,7 +497,7 @@ class PersonasController:
                     "Fecha de nacimiento (opcional)",
                     value=None,
                     min_value=date(1900, 1, 1),
-                    max_value=date.today(),
+                    max_value=hoy_local(),
                 )
                 notas = st.text_area("Notas (opcional)", placeholder="Ej. Alergias, condiciones médicas...")
 
@@ -559,7 +560,7 @@ class CitasController:
                     paciente = None
                 especialidad = st.text_input("Especialidad / Doctor", placeholder="Ej. Cardiología - Dr. Pérez")
                 lugar = st.text_input("Hospital / Clínica", placeholder="Ej. Hospital Nacional")
-                fecha = st.date_input("Fecha", value=date.today())
+                fecha = st.date_input("Fecha", value=hoy_local())
                 hora = st.time_input("Hora")
                 notas = st.text_area("Notas / Indicaciones", placeholder="Ej. Ir en ayunas de 8 horas")
 
@@ -590,9 +591,9 @@ class CitasController:
                 lugar = st.text_input("Lugar de atención", placeholder="Ej. Emergencia del Hospital Nacional")
                 fecha = st.date_input(
                     "Fecha del evento",
-                    value=date.today(),
+                    value=hoy_local(),
                     min_value=date(2020, 1, 1),
-                    max_value=date.today(),
+                    max_value=hoy_local(),
                 )
                 hora = st.time_input("Hora")
                 notas = st.text_area("Notas / Seguimiento (opcional)", placeholder="Ej. Derivado a control con especialista...")
@@ -834,7 +835,7 @@ class MedicinasController:
                     cantidad = st.text_input("Cantidad por toma", placeholder="Ej. 1 tableta, 10 ml")
                 with col2:
                     frecuencia = st.text_input("Frecuencia", placeholder="Ej. Cada 8 horas")
-                fecha_recojo = st.date_input("Fecha de inicio / recogida", value=date.today())
+                fecha_recojo = st.date_input("Fecha de inicio / recogida", value=hoy_local())
                 dias = st.number_input(
                     "Días que dura (solo tratamiento temporal)",
                     min_value=1, max_value=3650, value=30, step=1,

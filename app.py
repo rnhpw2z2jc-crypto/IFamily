@@ -31,7 +31,7 @@ st.set_page_config(
 st.markdown("""
 <link rel="manifest" href="app/static/manifest.json">
 <meta name="theme-color" content="#00BCD4">
-<div id="ifamily-version" data-version="2.5-inner-screens" style="display:none;"></div>
+<div id="ifamily-version" data-version="2.6-timezone-fix" style="display:none;"></div>
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="apple-touch-icon" href="app/static/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">

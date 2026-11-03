@@ -1,4 +1,4 @@
 streamlit==1.45.1
 firebase-admin==6.5.0
 bcrypt==4.3.0
-# deploy-trigger: 2026-11-02-inner-screens
+# deploy-trigger: 2026-11-02-timezone-fix
