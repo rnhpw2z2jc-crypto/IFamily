@@ -683,7 +683,9 @@ class CitasController:
                         st.rerun()
                 else:
                     st.caption(f"Registrada por {cita.get('registrado_por', '—')}")
-                    col_b, col_c = st.columns([2, 1])
+                    col_cal, col_b, col_c = st.columns([1.15, 1.55, 0.8])
+                    with col_cal:
+                        views.render_boton_calendario(cita, f"cita_{key}")
                     with col_b:
                         self.render_form_marcar_realizada(key, usuario)
                     with col_c:

@@ -8,7 +8,7 @@ CSS, tarjetas, badges, empty states, skeletons.
 import streamlit as st
 from datetime import date, datetime, timedelta
 
-from models import CitaModel, ServicioModel, MedicinaModel, _sanitize, hoy_local
+from models import CitaModel, ServicioModel, MedicinaModel, _sanitize, hoy_local, a_utc
 
 
 # -------------------------------------------------------------
@@ -960,8 +960,24 @@ def inject_css():
         color: #B91C1C !important;
         box-shadow: 0 4px 12px rgba(239, 68, 68, 0.18) !important;
     }
+    /* Añadir al calendario: acción suave, distinta de la principal. */
+    .stDownloadButton button {
+        min-height: 42px !important;
+        font-weight: 800 !important;
+        color: #006064 !important;
+        background: rgba(0, 188, 212, 0.1) !important;
+        border: 1px solid rgba(0, 188, 212, 0.35) !important;
+        box-shadow: none !important;
+    }
+    .stDownloadButton button:hover {
+        background: rgba(0, 188, 212, 0.18) !important;
+        border-color: rgba(0, 188, 212, 0.55) !important;
+        color: #00838F !important;
+        box-shadow: 0 4px 12px rgba(0, 188, 212, 0.15) !important;
+    }
+    .stDownloadButton button p, .stDownloadButton button div,
+    .stDownloadButton button span { color: inherit !important; }
     /* Botón principal de la pantalla (abre el formulario). */
-    [data-testid="stPopover"] > button,
     [data-testid="stPopoverButton"] {
         min-height: 46px !important;
         font-weight: 800 !important;
@@ -1951,6 +1967,169 @@ def inject_notificacion_script(alertas, proxima_cita=None):
     components.html(script, height=0, width=0)
 
 
+# -------------------------------------------------------------
+# CALENDARIO (.ICS): RECORDATORIOS NATIVOS DEL MÓVIL
+# -------------------------------------------------------------
+def _slug_ascii(texto, reemplazo="_"):
+    """Convierte texto a ASCII simple para UID y nombres de archivo.
+
+    Algunos calendarios (Android sobre todo) fallan con acentos o símbolos
+    en el UID o en el nombre del archivo descargado.
+    """
+    import unicodedata
+
+    normalizado = unicodedata.normalize("NFKD", str(texto or ""))
+    sin_tildes = "".join(c for c in normalizado if not unicodedata.combining(c))
+    limpio = "".join(
+        c if (c.isalnum() and c.isascii()) or c in "-_" else reemplazo
+        for c in sin_tildes
+    )
+    return limpio.strip("_") or "cita"
+
+
+def _ics_escapar(texto):
+    """Escapa caracteres especiales según el formato iCalendar."""
+    return (
+        str(texto or "")
+        .replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\r\n", "\\n")
+        .replace("\n", "\\n")
+        .replace("\r", "")
+    )
+
+
+def _ics_doblar_linea(linea):
+    """Divide líneas largas en bloques de 74 caracteres (RFC 5545)."""
+    if len(linea) <= 74:
+        return [linea]
+    partes = [linea[:74]]
+    resto = linea[74:]
+    while resto:
+        partes.append(" " + resto[:73])
+        resto = resto[73:]
+    return partes
+
+
+def generar_ics_cita(cita, key=""):
+    """Genera un evento iCalendar con alarma 1 día y 2 horas antes.
+
+    Devuelve el texto .ics o None si la cita no tiene una fecha válida.
+    """
+    fecha_txt = str(cita.get("fecha", "")).strip()
+    try:
+        dia = datetime.strptime(fecha_txt, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return None
+
+    paciente = str(cita.get("paciente", "Paciente"))
+    especialidad = str(cita.get("especialidad", "Cita médica"))
+    lugar = str(cita.get("lugar", "") or "")
+    notas = str(cita.get("notas", "") or "")
+
+    hora_txt = str(cita.get("hora", "")).strip()
+    inicio = None
+    for formato in ("%H:%M:%S", "%H:%M"):
+        try:
+            h = datetime.strptime(hora_txt, formato)
+            inicio = dia.replace(hour=h.hour, minute=h.minute, second=0, microsecond=0)
+            break
+        except (ValueError, TypeError):
+            continue
+
+    # UID estable: mismo evento se actualiza (no se duplica) aunque se
+    # descargue desde la lista o desde el pop-up.
+    uid_base = f"ifamily-{fecha_txt}-{hora_txt or 'sinhora'}-{paciente}"
+    uid = _slug_ascii(uid_base, reemplazo="-")
+
+    lineas = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//iFamily//Control Familiar//ES",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        f"UID:{uid}@ifamily",
+        f"DTSTAMP:{ahora_utc_str()}",
+        f"SUMMARY:{_ics_escapar(f'Cita médica: {paciente} — {especialidad}')}",
+    ]
+    if lugar:
+        lineas.append(f"LOCATION:{_ics_escapar(lugar)}")
+
+    detalle = [f"Paciente: {paciente}", f"Especialidad: {especialidad}"]
+    if lugar:
+        detalle.append(f"Lugar: {lugar}")
+    if notas:
+        detalle.append(f"Notas: {notas}")
+    detalle.append("Recordatorio creado desde iFamily.")
+    lineas.append(f"DESCRIPTION:{_ics_escapar(chr(10).join(detalle))}")
+
+    if inicio is not None:
+        inicio_utc = a_utc(inicio)
+        fin_utc = inicio_utc + timedelta(hours=1)
+        lineas.extend([
+            f"DTSTART:{inicio_utc.strftime('%Y%m%dT%H%M%SZ')}",
+            f"DTEND:{fin_utc.strftime('%Y%m%dT%H%M%SZ')}",
+            "BEGIN:VALARM",
+            "TRIGGER:-P1D",
+            "ACTION:DISPLAY",
+            f"DESCRIPTION:{_ics_escapar('Cita médica mañana: ' + paciente)}",
+            "END:VALARM",
+            "BEGIN:VALARM",
+            "TRIGGER:-PT2H",
+            "ACTION:DISPLAY",
+            f"DESCRIPTION:{_ics_escapar('Cita médica en 2 horas: ' + paciente)}",
+            "END:VALARM",
+        ])
+    else:
+        # Sin hora: evento de todo el día con aviso a las 9:00 del día anterior.
+        lineas.extend([
+            f"DTSTART;VALUE=DATE:{dia.strftime('%Y%m%d')}",
+            f"DTEND;VALUE=DATE:{(dia + timedelta(days=1)).strftime('%Y%m%d')}",
+            "BEGIN:VALARM",
+            "TRIGGER:-PT15H",
+            "ACTION:DISPLAY",
+            f"DESCRIPTION:{_ics_escapar('Cita médica mañana: ' + paciente)}",
+            "END:VALARM",
+        ])
+
+    lineas.extend([
+        "STATUS:CONFIRMED",
+        "TRANSP:OPAQUE",
+        "END:VEVENT",
+        "END:VCALENDAR",
+    ])
+
+    dobladas = []
+    for linea in lineas:
+        dobladas.extend(_ics_doblar_linea(linea))
+    return "\r\n".join(dobladas) + "\r\n"
+
+
+def ahora_utc_str():
+    from datetime import timezone as _tz
+    return datetime.now(_tz.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def render_boton_calendario(cita, key, etiqueta="📅 Calendario"):
+    """Botón que descarga la cita como evento de calendario con alarmas."""
+    ics = generar_ics_cita(cita, key)
+    if not ics:
+        return
+    paciente = str(cita.get("paciente", "cita"))
+    nombre = _slug_ascii(paciente)
+    st.download_button(
+        etiqueta,
+        data=ics.encode("utf-8"),
+        file_name=f"cita_{cita.get('fecha', '')}_{nombre}.ics".replace(" ", "_"),
+        mime="text/calendar",
+        key=f"ics_{key}",
+        use_container_width=True,
+        help="Añade la cita a tu calendario con alarma 1 día y 2 horas antes.",
+    )
+
+
 @st.dialog("📅 Tu próxima cita")
 def _dialog_proxima_cita(cita):
     """Contenido del pop-up con la cita más próxima."""
@@ -1971,6 +2150,7 @@ def _dialog_proxima_cita(cita):
         st.markdown(f"**🕐 Hora:** {_sanitize(cita.get('hora'))}")
     if cita.get("notas"):
         st.markdown(f"**📝 Notas:** {_sanitize(cita.get('notas'))}")
+    render_boton_calendario(cita, "popup", etiqueta="📅 Añadir al calendario")
     if st.button("👍 Entendido", use_container_width=True, key="dlg_proxima_cita_ok"):
         st.rerun()
 

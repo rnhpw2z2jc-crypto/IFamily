@@ -48,6 +48,11 @@ def hoy_local():
     return ahora_local().date()
 
 
+def a_utc(fecha_hora_local):
+    """Convierte un datetime local (sin zona) a UTC."""
+    return fecha_hora_local.replace(tzinfo=_ZONA_HORARIA).astimezone(timezone.utc)
+
+
 # -------------------------------------------------------------
 # HELPERS: HASHING SEGURO
 # -------------------------------------------------------------
