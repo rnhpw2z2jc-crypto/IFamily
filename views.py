@@ -891,6 +891,478 @@ def inject_css():
         .home-grid-title { font-size: 1.02rem; }
         .home-grid-sub { font-size: 0.78rem; margin-bottom: 8px; }
     }
+
+    /* ---------------------------------------------------------
+       PANTALLAS INTERNAS: JERARQUÍA Y LEGIBILIDAD
+    --------------------------------------------------------- */
+    /* Textos de apoyo y etiquetas con contraste suficiente. */
+    [data-testid="stCaptionContainer"] p {
+        color: #64748B !important;
+        font-size: 0.8rem !important;
+        line-height: 1.45 !important;
+    }
+    [data-testid="stWidgetLabel"] p {
+        color: #334155 !important;
+        font-weight: 700 !important;
+        font-size: 0.84rem !important;
+        letter-spacing: 0.01em;
+    }
+    /* El texto de los botones hereda su color (evita texto oscuro sobre
+       el degradado turquesa). */
+    .stButton > button p, .stButton > button div, .stButton > button span,
+    .stFormSubmitButton > button p, .stFormSubmitButton > button div,
+    .stFormSubmitButton > button span,
+    [data-testid="stPopover"] > button p, [data-testid="stPopover"] > button div,
+    [data-testid="stPopover"] > button span,
+    [data-testid="stPopoverButton"] p, [data-testid="stPopoverButton"] div,
+    [data-testid="stPopoverButton"] span {
+        color: inherit !important;
+    }
+    .stButton > button:focus-visible,
+    .stFormSubmitButton > button:focus-visible,
+    [data-testid="stPopover"] > button:focus-visible,
+    [data-testid="stPopoverButton"]:focus-visible {
+        outline: none !important;
+        box-shadow: 0 0 0 3px rgba(0, 188, 212, 0.35),
+                    0 6px 18px rgba(0, 188, 212, 0.22) !important;
+    }
+    /* "Volver" como acción secundaria: no compite con el botón principal. */
+    [class*="st-key-btn_volver_home"] button {
+        background: rgba(255, 255, 255, 0.9) !important;
+        color: #334155 !important;
+        border: 1px solid rgba(15, 23, 42, 0.12) !important;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05) !important;
+        font-weight: 700 !important;
+    }
+    [class*="st-key-btn_volver_home"] button:hover {
+        background: #FFFFFF !important;
+        border-color: rgba(0, 188, 212, 0.55) !important;
+        color: #00838F !important;
+        box-shadow: 0 6px 16px rgba(0, 188, 212, 0.15) !important;
+    }
+    /* Eliminar: rojo suave en reposo, relleno al pasar el cursor. */
+    [class*="st-key-del_"] button {
+        background: rgba(239, 68, 68, 0.07) !important;
+        color: #DC2626 !important;
+        border: 1px solid rgba(239, 68, 68, 0.22) !important;
+        box-shadow: none !important;
+        min-height: 42px !important;
+    }
+    [class*="st-key-del_"] button:hover {
+        background: rgba(239, 68, 68, 0.14) !important;
+        border-color: rgba(239, 68, 68, 0.5) !important;
+        color: #B91C1C !important;
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.18) !important;
+    }
+    /* Botón principal de la pantalla (abre el formulario). */
+    [data-testid="stPopover"] > button,
+    [data-testid="stPopoverButton"] {
+        min-height: 46px !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.01em;
+    }
+    /* Los popovers son la acción principal de cada pantalla: botón sólido. */
+    [data-testid="stPopoverButton"] {
+        color: #FFFFFF !important;
+        background: linear-gradient(135deg, var(--primary), var(--primary-dark)) !important;
+        border: 0 !important;
+        border-radius: 10px !important;
+        box-shadow: 0 4px 14px rgba(0, 188, 212, 0.28) !important;
+    }
+    [data-testid="stPopoverButton"]:hover {
+        background: linear-gradient(135deg, var(--primary-dark), var(--primary-deeper)) !important;
+        box-shadow: 0 8px 22px rgba(0, 188, 212, 0.34) !important;
+        transform: translateY(-1px);
+    }
+
+    /* Cabecera de sección: banda con icono y acento de color. */
+    .section-hero {
+        --hero-a: #00BCD4;
+        --hero-b: #00838F;
+        --hero-soft: rgba(0, 188, 212, 0.09);
+        --hero-line: rgba(0, 188, 212, 0.2);
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 20px;
+        margin: 4px 0 18px 0;
+        border-radius: 16px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), var(--hero-soft));
+        border: 1px solid var(--hero-line);
+        box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
+    }
+    .section-hero.tone-red {
+        --hero-a: #F87171; --hero-b: #DC2626;
+        --hero-soft: rgba(239, 68, 68, 0.08); --hero-line: rgba(239, 68, 68, 0.2);
+    }
+    .section-hero.tone-indigo {
+        --hero-a: #818CF8; --hero-b: #4F46E5;
+        --hero-soft: rgba(99, 102, 241, 0.08); --hero-line: rgba(99, 102, 241, 0.2);
+    }
+    .section-hero.tone-green {
+        --hero-a: #34D399; --hero-b: #059669;
+        --hero-soft: rgba(16, 185, 129, 0.08); --hero-line: rgba(16, 185, 129, 0.2);
+    }
+    .section-hero.tone-amber {
+        --hero-a: #FBBF24; --hero-b: #D97706;
+        --hero-soft: rgba(245, 158, 11, 0.09); --hero-line: rgba(245, 158, 11, 0.22);
+    }
+    .section-hero.tone-violet {
+        --hero-a: #A78BFA; --hero-b: #7C3AED;
+        --hero-soft: rgba(139, 92, 246, 0.08); --hero-line: rgba(139, 92, 246, 0.2);
+    }
+    .section-hero.tone-blue {
+        --hero-a: #60A5FA; --hero-b: #2563EB;
+        --hero-soft: rgba(59, 130, 246, 0.08); --hero-line: rgba(59, 130, 246, 0.2);
+    }
+    .section-hero-icon {
+        flex: 0 0 auto;
+        width: 46px;
+        height: 46px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.35rem;
+        color: #FFFFFF;
+        background: linear-gradient(135deg, var(--hero-a), var(--hero-b));
+        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.14);
+    }
+    .section-hero-text { min-width: 0; }
+    .section-hero-title {
+        font-size: 1.16rem;
+        font-weight: 900;
+        color: #0F172A;
+        line-height: 1.25;
+        letter-spacing: -0.02em;
+    }
+    .section-hero-desc {
+        margin-top: 3px;
+        color: #64748B;
+        font-size: 0.84rem;
+        line-height: 1.45;
+    }
+    .section-hero.compact {
+        padding: 11px 13px;
+        gap: 11px;
+        margin-bottom: 14px;
+        border-radius: 13px;
+    }
+    .section-hero.compact .section-hero-icon {
+        width: 37px; height: 37px; border-radius: 11px; font-size: 1.05rem;
+    }
+    .section-hero.compact .section-hero-title { font-size: 1rem; }
+
+    /* Chips de resumen: conteos rápidos y escaneables. */
+    .stat-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 2px 0 14px 0;
+    }
+    .stat-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.86);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #475569;
+    }
+    .stat-chip b { font-size: 0.92rem; font-weight: 900; color: #0F172A; }
+    .stat-chip .stat-icon { font-size: 0.9rem; line-height: 1; }
+    .stat-chip.tone-teal {
+        background: rgba(0, 188, 212, 0.09);
+        border-color: rgba(0, 188, 212, 0.25);
+        color: #00838F;
+    }
+    .stat-chip.tone-teal b { color: #00838F; }
+    .stat-chip.tone-amber {
+        background: rgba(245, 158, 11, 0.1);
+        border-color: rgba(245, 158, 11, 0.25);
+        color: #B45309;
+    }
+    .stat-chip.tone-amber b { color: #B45309; }
+    .stat-chip.tone-green {
+        background: rgba(16, 185, 129, 0.1);
+        border-color: rgba(16, 185, 129, 0.25);
+        color: #047857;
+    }
+    .stat-chip.tone-green b { color: #047857; }
+    .stat-chip.tone-red {
+        background: rgba(239, 68, 68, 0.1);
+        border-color: rgba(239, 68, 68, 0.25);
+        color: #B91C1C;
+    }
+    .stat-chip.tone-red b { color: #B91C1C; }
+    .stat-chip.tone-indigo {
+        background: rgba(99, 102, 241, 0.1);
+        border-color: rgba(99, 102, 241, 0.25);
+        color: #4338CA;
+    }
+    .stat-chip.tone-indigo b { color: #4338CA; }
+
+    /* Ficha de datos dentro de cada registro. */
+    .info-card {
+        background: rgba(248, 250, 252, 0.85);
+        border: 1px solid rgba(15, 23, 42, 0.06);
+        border-radius: 12px;
+        padding: 4px 14px;
+        margin: 10px 0 12px 0;
+    }
+    .info-row {
+        display: grid;
+        grid-template-columns: 148px 1fr;
+        gap: 2px 14px;
+        padding: 8px 0;
+        border-bottom: 1px dashed rgba(15, 23, 42, 0.07);
+    }
+    .info-row:last-child { border-bottom: 0; }
+    .info-label {
+        font-size: 0.7rem;
+        font-weight: 800;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #64748B;
+        padding-top: 3px;
+    }
+    .info-value {
+        font-size: 0.9rem;
+        color: #1E293B;
+        line-height: 1.55;
+        word-break: break-word;
+    }
+
+    /* Tarjetas de personas / usuarios. */
+    .entity-card {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        padding: 13px 16px;
+        margin-bottom: 10px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+        transition: border-color 0.18s ease, box-shadow 0.18s ease,
+                    transform 0.18s ease;
+    }
+    .entity-card:hover {
+        border-color: rgba(0, 188, 212, 0.45);
+        box-shadow: 0 8px 20px rgba(0, 188, 212, 0.1);
+        transform: translateY(-1px);
+    }
+    .entity-avatar {
+        flex: 0 0 auto;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.95rem;
+        font-weight: 800;
+        color: #FFFFFF;
+        background: linear-gradient(135deg, var(--primary), var(--primary-deeper));
+        box-shadow: 0 4px 12px rgba(0, 188, 212, 0.25);
+    }
+    .entity-body { min-width: 0; }
+    .entity-title {
+        font-weight: 800;
+        font-size: 0.97rem;
+        color: #0F172A;
+        line-height: 1.3;
+        word-break: break-word;
+    }
+    .entity-sub {
+        color: #64748B;
+        font-size: 0.79rem;
+        margin-top: 2px;
+        word-break: break-word;
+    }
+    .entity-tag {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(0, 188, 212, 0.1);
+        border: 1px solid rgba(0, 188, 212, 0.22);
+        color: #00838F;
+        font-size: 0.66rem;
+        font-weight: 800;
+        vertical-align: middle;
+        letter-spacing: 0.02em;
+    }
+
+    /* Encabezados de bloques pequeños (medicinas por persona, etc.). */
+    .mini-title {
+        font-weight: 800;
+        font-size: 0.95rem;
+        color: #0F172A;
+        margin: 2px 0 4px 0;
+        line-height: 1.35;
+    }
+    .mini-sub {
+        color: #64748B;
+        font-size: 0.78rem;
+        margin-bottom: 2px;
+    }
+
+    /* Tarjeta del código de invitación familiar. */
+    .invite-card {
+        background: linear-gradient(135deg, rgba(0, 188, 212, 0.12), rgba(255, 255, 255, 0.9));
+        border: 1px dashed rgba(0, 188, 212, 0.45);
+        border-radius: 16px;
+        padding: 18px 16px;
+        text-align: center;
+        box-shadow: 0 4px 16px rgba(0, 188, 212, 0.08);
+    }
+    .invite-label {
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: #00838F;
+    }
+    .invite-code {
+        margin: 8px 0 6px 0;
+        font-family: 'Fira Code', ui-monospace, monospace;
+        font-size: 1.5rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        color: #006064;
+        word-break: break-all;
+    }
+    .invite-hint {
+        font-size: 0.74rem;
+        color: #64748B;
+        line-height: 1.4;
+    }
+
+    /* Tarjetas de servicios: código destacado y copiable. */
+    .service-card {
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    }
+    .service-card:hover {
+        border-color: rgba(0, 188, 212, 0.45);
+        box-shadow: 0 10px 24px rgba(0, 188, 212, 0.12);
+    }
+    .service-code {
+        color: #006064;
+        background: rgba(0, 188, 212, 0.07);
+        border-color: rgba(0, 188, 212, 0.35);
+    }
+    .service-code::after {
+        content: 'Toca para copiar';
+        display: block;
+        margin-top: 2px;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.64rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #64748B;
+    }
+
+    /* Registros plegables (citas, emergencias, medicinas...). */
+    [data-testid="stExpander"] {
+        background: rgba(255, 255, 255, 0.9) !important;
+        border: 1px solid rgba(15, 23, 42, 0.08) !important;
+        border-radius: 14px !important;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
+        margin-bottom: 10px;
+        overflow: hidden;
+        transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+    [data-testid="stExpander"]:hover {
+        border-color: rgba(0, 188, 212, 0.4) !important;
+        box-shadow: 0 8px 22px rgba(0, 188, 212, 0.1) !important;
+    }
+    [data-testid="stExpander"] details {
+        border: 0 !important;
+        background: transparent !important;
+    }
+    [data-testid="stExpander"] summary {
+        padding: 13px 16px !important;
+        background: transparent !important;
+        transition: background 0.18s ease;
+    }
+    [data-testid="stExpander"] summary:hover {
+        background: rgba(0, 188, 212, 0.05) !important;
+    }
+    [data-testid="stExpander"] summary p {
+        font-weight: 700 !important;
+        font-size: 0.92rem !important;
+        color: #0F172A !important;
+        line-height: 1.4 !important;
+    }
+    [data-testid="stExpander"] summary svg { color: #00838F !important; }
+    [data-testid="stExpander"] details[open] {
+        box-shadow: inset 4px 0 0 rgba(0, 188, 212, 0.35);
+    }
+    [data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+        padding: 2px 16px 14px 16px !important;
+        background: transparent !important;
+    }
+
+    /* Formularios: contenedor suave y coherente con las tarjetas. */
+    [data-testid="stForm"] {
+        border: 1px solid rgba(0, 188, 212, 0.18);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.72);
+    }
+    [data-testid="stPopoverBody"] {
+        border: 1px solid rgba(0, 188, 212, 0.2) !important;
+        border-radius: 16px !important;
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.18) !important;
+    }
+
+    /* Filtros tipo píldora: texto blanco legible en la opción activa. */
+    div[role="radiogroup"] label {
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+    div[role="radiogroup"] label:hover {
+        box-shadow: 0 4px 12px rgba(0, 188, 212, 0.12);
+    }
+    div[role="radiogroup"] label[data-checked="true"] div,
+    div[role="radiogroup"] label[data-checked="true"] p,
+    div[role="radiogroup"] label:has(input:checked) div,
+    div[role="radiogroup"] label:has(input:checked) p {
+        color: #FFFFFF !important;
+    }
+
+    @media (max-width: 640px) {
+        .section-hero {
+            padding: 12px 14px;
+            gap: 11px;
+            margin-bottom: 14px;
+            border-radius: 14px;
+        }
+        .section-hero-icon {
+            width: 38px; height: 38px; border-radius: 12px; font-size: 1.1rem;
+        }
+        .section-hero-title { font-size: 1.02rem; }
+        .section-hero-desc { font-size: 0.76rem; }
+        .info-row { grid-template-columns: 1fr; gap: 1px; padding: 7px 0; }
+        .info-label { padding-top: 0; }
+        .info-value { font-size: 0.86rem; }
+        .stat-chip { font-size: 0.72rem; padding: 5px 10px; }
+        .entity-card { padding: 11px 12px; gap: 10px; }
+        .entity-avatar { width: 38px; height: 38px; font-size: 0.85rem; }
+        .entity-title { font-size: 0.9rem; }
+        .invite-code { font-size: 1.25rem; }
+        [data-testid="stExpander"] summary { padding: 11px 12px !important; }
+        [data-testid="stExpander"] summary p { font-size: 0.86rem !important; }
+        [data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+            padding: 2px 12px 12px 12px !important;
+        }
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -1177,16 +1649,111 @@ def render_user_info(nombre, familia_nombre, rol):
 # -------------------------------------------------------------
 # SECTION HEADER
 # -------------------------------------------------------------
-def render_section_header(icon, title, description=""):
-    st.markdown(f"""
-    <div style="margin-bottom:20px;">
-        <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
-            <span style="font-size:1.5rem;">{_sanitize(icon)}</span>
-            <h2 style="margin:0; font-size:1.4rem; font-weight:900;">{_sanitize(title)}</h2>
-        </div>
-        {'<p style="color:var(--text-muted); font-size:0.9rem; margin:0;">' + _sanitize(description) + '</p>' if description else ''}
-    </div>
-    """, unsafe_allow_html=True)
+_TONOS_SECCION = {"teal", "red", "indigo", "green", "amber", "violet", "blue"}
+
+
+def render_section_header(icon, title, description="", tone="teal", compact=False):
+    """Cabecera de sección con acento de color.
+
+    `tone` diferencia visualmente cada área (citas, emergencias, medicinas...)
+    y `compact` se usa dentro de los formularios para no ocupar tanto alto.
+    """
+    tone = tone if tone in _TONOS_SECCION else "teal"
+    clase = "section-hero compact" if compact else "section-hero"
+    desc = (f'<div class="section-hero-desc">{_sanitize(description)}</div>'
+            if description else "")
+    st.markdown(
+        f'<div class="{clase} tone-{tone}">'
+        f'<div class="section-hero-icon">{_sanitize(icon)}</div>'
+        f'<div class="section-hero-text">'
+        f'<div class="section-hero-title">{_sanitize(title)}</div>'
+        f'{desc}'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_stat_strip(items):
+    """Fila de chips con conteos: [{value, label, tone?, icon?}, ...]."""
+    chips = []
+    for item in items:
+        label = item.get("label", "")
+        if not label:
+            continue
+        tone = item.get("tone", "")
+        tone_cls = f" tone-{tone}" if tone else ""
+        icono = item.get("icon", "")
+        icon_html = (f'<span class="stat-icon">{_sanitize(icono)}</span>'
+                     if icono else "")
+        valor = item.get("value", 0)
+        valor_txt = "0" if valor in (0, None) else str(valor)
+        chips.append(
+            f'<span class="stat-chip{tone_cls}">{icon_html}'
+            f'<b>{_sanitize(valor_txt)}</b> {_sanitize(label)}</span>'
+        )
+    if chips:
+        st.markdown('<div class="stat-strip">' + "".join(chips) + '</div>',
+                    unsafe_allow_html=True)
+
+
+def render_info_rows(rows):
+    """Ficha de datos legible: filas (icono, etiqueta, valor).
+
+    Omite los valores vacíos para no dejar campos en blanco.
+    """
+    filas = []
+    for icono, etiqueta, valor in rows:
+        if valor is None:
+            continue
+        texto = str(valor).strip()
+        if not texto or texto in {"—", "-"}:
+            continue
+        icon_html = f"{_sanitize(icono)} " if icono else ""
+        filas.append(
+            f'<div class="info-row">'
+            f'<div class="info-label">{icon_html}{_sanitize(etiqueta)}</div>'
+            f'<div class="info-value">{_sanitize(texto)}</div>'
+            f'</div>'
+        )
+    if filas:
+        st.markdown('<div class="info-card">' + "".join(filas) + '</div>',
+                    unsafe_allow_html=True)
+
+
+def render_entity_card(iniciales, nombre, subtitulo="", tag=""):
+    """Tarjeta de persona o usuario con avatar, nombre y detalle."""
+    tag_html = (f'<span class="entity-tag">{_sanitize(tag)}</span>'
+                if tag else "")
+    sub = (f'<div class="entity-sub">{_sanitize(subtitulo)}</div>'
+           if subtitulo else "")
+    st.markdown(
+        f'<div class="entity-card">'
+        f'<div class="entity-avatar">{_sanitize(iniciales)}</div>'
+        f'<div class="entity-body">'
+        f'<div class="entity-title">{_sanitize(nombre)}{tag_html}</div>'
+        f'{sub}'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_mini_header(title, subtitle=""):
+    """Título pequeño para bloques dentro de un registro."""
+    sub = f'<div class="mini-sub">{_sanitize(subtitle)}</div>' if subtitle else ""
+    st.markdown(f'<div class="mini-title">{_sanitize(title)}</div>{sub}',
+                unsafe_allow_html=True)
+
+
+def render_invite_card(codigo):
+    """Tarjeta destacada con el código de invitación de la familia."""
+    st.markdown(
+        f'<div class="invite-card">'
+        f'<div class="invite-label">Código de invitación</div>'
+        f'<div class="invite-code">{_sanitize(codigo)}</div>'
+        f'<div class="invite-hint">Compártelo para que otros se unan a tu familia</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 # -------------------------------------------------------------

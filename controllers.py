@@ -307,32 +307,35 @@ class FamilyController:
         if not familia:
             return
 
-        st.markdown("---")
-        views.render_section_header("👥", "Mi Familia", familia.get("nombre", ""))
+        views.render_section_header(
+            "👥", "Mi Familia", familia.get("nombre", ""), tone="blue",
+        )
+
+        miembros = familia.get("miembros", {})
+        views.render_stat_strip([
+            {"value": len(miembros), "label": "miembro(s)", "icon": "👥", "tone": "indigo"},
+        ])
 
         col_info, col_code = st.columns([2, 1])
 
         with col_info:
-            miembros = familia.get("miembros", {})
             if miembros:
                 for mid, mdata in miembros.items():
                     nombre_m = mdata.get("nombre", "Sin nombre")
                     rol_m = mdata.get("rol_en_familia", "miembro")
                     es_admin = rol_m == "admin"
                     iniciales = "".join([n[0].upper() for n in nombre_m.split()[:2]]) if nombre_m else "?"
-
-                    badge = " 🔷 Admin" if es_admin else ""
-                    st.markdown(f"**{iniciales}** {nombre_m}{badge}")
-                    st.caption(f"{rol_m.title()}")
+                    views.render_entity_card(
+                        iniciales, nombre_m, rol_m.title(),
+                        tag="Admin" if es_admin else "",
+                    )
             else:
                 views.render_empty_state("👤", "Sin miembros", "Aún no hay miembros en esta familia.")
 
         with col_code:
             codigo = familia.get("codigo_invitacion", "")
             if codigo:
-                st.markdown("**Código de Invitación**")
-                st.markdown(f"### `{codigo}`")
-                st.caption("Comparte este código para que otros se unan")
+                views.render_invite_card(codigo)
 
 
 # -------------------------------------------------------------
@@ -345,8 +348,10 @@ class AdminController:
         self.user_model = user_model
 
     def render_admin_panel(self):
-        st.markdown("---")
-        views.render_section_header("⚙️", "Panel de Administración", "Gestiona usuarios de la plataforma.")
+        views.render_section_header(
+            "⚙️", "Panel de Administración",
+            "Gestiona usuarios de la plataforma.", tone="blue",
+        )
 
         tab_crear, tab_lista, tab_info = st.tabs([
             "➕ Crear Usuario",
@@ -392,7 +397,10 @@ class AdminController:
             views.render_empty_state("👥", "Sin usuarios", "Aún no hay usuarios registrados.")
             return
 
-        st.markdown(f"**{len(users)} usuarios registrados**")
+        views.render_stat_strip([
+            {"value": len(users), "label": "usuario(s) registrado(s)",
+             "icon": "👥", "tone": "indigo"},
+        ])
 
         for uid, udata in users.items():
             nombre = udata.get("nombre", "Sin nombre")
@@ -402,17 +410,19 @@ class AdminController:
             es_admin_inicial = udata.get("es_admin_inicial", False)
             iniciales = "".join([n[0].upper() for n in nombre.split()[:2]]) if nombre else "?"
 
-            badges = ""
+            etiquetas = []
             if is_admin_user:
-                badges += " 🔷 Admin"
+                etiquetas.append("Admin")
             if es_admin_inicial:
-                badges += " ⭐ Inicial"
+                etiquetas.append("Inicial")
 
-            col_info, col_actions = st.columns([4, 1])
+            col_info, col_actions = st.columns([6, 1], vertical_alignment="center")
 
             with col_info:
-                st.markdown(f"**{iniciales}** {nombre}{badges}")
-                st.caption(f"📧 {email} · ID: `{uid}`")
+                views.render_entity_card(
+                    iniciales, nombre, f"📧 {email} · ID: {uid}",
+                    tag=" · ".join(etiquetas),
+                )
 
             with col_actions:
                 if not es_admin_inicial:
@@ -475,7 +485,7 @@ class PersonasController:
     def render_form_crear(self, usuario):
         with st.popover("➕ Agregar Persona", use_container_width=True):
             with st.form("form_persona", clear_on_submit=True):
-                views.render_section_header("👤", "Nueva Persona")
+                views.render_section_header("👤", "Nueva Persona", tone="violet", compact=True)
                 nombre = st.text_input("Nombre completo", placeholder="Ej. Juan Pérez")
                 dni = st.text_input("DNI (opcional)", placeholder="Ej. 12345678")
                 relacion = st.selectbox("Relación", [
@@ -506,21 +516,25 @@ class PersonasController:
             views.render_empty_state("👤", "Sin personas", "Agrega personas para hacerles seguimiento de citas y servicios.")
             return personas
 
+        views.render_stat_strip([
+            {"value": len(personas), "label": "persona(s) en seguimiento",
+             "icon": "👤", "tone": "violet"},
+        ])
+
         for pid, pdata in personas.items():
             nombre_p = pdata.get("nombre", "Sin nombre")
             dni_p = pdata.get("dni", "")
             relacion_p = pdata.get("relacion", "")
             iniciales = "".join([n[0].upper() for n in nombre_p.split()[:2]]) if nombre_p else "?"
 
-            col_info, col_del = st.columns([5, 1])
+            col_info, col_del = st.columns([6, 1], vertical_alignment="center")
             with col_info:
-                st.markdown(f"**{iniciales}** {nombre_p}")
                 dni_text = f" · DNI: {dni_p}" if dni_p else ""
-                st.caption(f"{relacion_p}{dni_text}")
+                views.render_entity_card(
+                    iniciales, nombre_p, f"{relacion_p}{dni_text}".strip(" ·"),
+                )
             with col_del:
-                st.write("")
-                st.write("")
-                if st.button("🗑️", key=f"del_persona_{pid}"):
+                if st.button("🗑️", key=f"del_persona_{pid}", help="Eliminar persona"):
                     self.model.eliminar(pid)
                     st.rerun()
 
@@ -537,7 +551,7 @@ class CitasController:
     def render_form_agendar(self, usuario, persona_names):
         with st.popover("➕ Agendar Cita", use_container_width=True):
             with st.form("form_citas", clear_on_submit=True):
-                views.render_section_header("📅", "Nueva Cita")
+                views.render_section_header("📅", "Nueva Cita", tone="teal", compact=True)
                 if persona_names:
                     paciente = st.selectbox("Paciente", persona_names)
                 else:
@@ -564,7 +578,7 @@ class CitasController:
     def render_form_registrar_emergencia(self, usuario, persona_names):
         with st.popover("🚨 Registrar Emergencia", use_container_width=True):
             with st.form("form_emergencia", clear_on_submit=True):
-                views.render_section_header("🚨", "Emergencia")
+                views.render_section_header("🚨", "Emergencia", tone="red", compact=True)
                 st.caption("Registra un evento de emergencia que se sumará al historial clínico de la persona.")
                 if persona_names:
                     paciente = st.selectbox("Paciente", persona_names)
@@ -598,7 +612,7 @@ class CitasController:
     def render_form_marcar_realizada(self, key, usuario):
         with st.popover("✅ Marcar Realizada", use_container_width=True):
             with st.form(f"form_realizada_{key}"):
-                views.render_section_header("📋", "Registrar Historial")
+                views.render_section_header("📋", "Registrar Historial", tone="indigo", compact=True)
                 diagnostico = st.text_area("Diagnóstico / Resultado", key=f"diag_{key}")
                 tratamiento = st.text_area("Tratamiento / Medicamentos", key=f"trat_{key}")
                 recomendaciones = st.text_area("Recomendaciones", key=f"reco_{key}")
@@ -615,7 +629,11 @@ class CitasController:
         return st.radio("Filtrar por paciente", opciones, horizontal=True, key=key)
 
     def render_lista_programadas(self, usuario, persona_names):
-        views.render_section_header("📅", "Registro de Citas Médicas", "Citas pendientes y realizadas, diferenciadas por color.")
+        views.render_section_header(
+            "📅", "Registro de Citas Médicas",
+            "Citas pendientes y realizadas, diferenciadas por color.",
+            tone="teal",
+        )
         filtro = self.render_filtro_paciente(persona_names, key="filtro_prog")
         todas = self.model.get_no_emergencias()
         vista = CitaModel.filtrar_por_paciente(todas, filtro)
@@ -626,10 +644,11 @@ class CitasController:
 
         pendientes = {k: v for k, v in vista.items() if v.get("estado", "programada") == "programada"}
         realizadas = {k: v for k, v in vista.items() if v.get("estado") == "realizada"}
-        st.caption(
-            f"**{len(vista)}** cita(s) — "
-            f"⏳ {len(pendientes)} pendiente(s) · ✅ {len(realizadas)} realizada(s)"
-        )
+        views.render_stat_strip([
+            {"value": len(vista), "label": "cita(s)", "icon": "📅", "tone": "teal"},
+            {"value": len(pendientes), "label": "pendiente(s)", "icon": "⏳", "tone": "amber"},
+            {"value": len(realizadas), "label": "realizada(s)", "icon": "✅", "tone": "green"},
+        ])
 
         # Pendientes primero (por fecha ascendente), luego realizadas (más reciente primero)
         ordenadas = (
@@ -647,19 +666,16 @@ class CitasController:
                 if not es_realizada:
                     badges += views.badge_estado_cita(cita.get('fecha'))
                 st.markdown(badges, unsafe_allow_html=True)
-                st.markdown(f"**🏥 Lugar:** {cita.get('lugar', '—')}")
-                if cita.get("hora"):
-                    st.markdown(f"**🕐 Hora:** {cita.get('hora')}")
-                if cita.get("notas"):
-                    st.markdown(f"**📝 Notas:** {cita.get('notas')}")
+                views.render_info_rows([
+                    ("🏥", "Lugar", cita.get("lugar")),
+                    ("🕐", "Hora", cita.get("hora")),
+                    ("📝", "Notas", cita.get("notas")),
+                    ("🩺", "Diagnóstico", cita.get("diagnostico")),
+                    ("💊", "Tratamiento", cita.get("tratamiento")),
+                    ("📋", "Recomendaciones", cita.get("recomendaciones")),
+                ])
 
                 if es_realizada:
-                    if cita.get("diagnostico"):
-                        st.markdown(f"**🩺 Diagnóstico:** {cita.get('diagnostico')}")
-                    if cita.get("tratamiento"):
-                        st.markdown(f"**💊 Tratamiento:** {cita.get('tratamiento')}")
-                    if cita.get("recomendaciones"):
-                        st.markdown(f"**📋 Recomendaciones:** {cita.get('recomendaciones')}")
                     st.caption(f"Realizada · Registrada por {cita.get('registrado_por', '—')}")
                     if st.button("🗑️ Eliminar", key=f"del_cita_{key}"):
                         self.model.eliminar(key)
@@ -675,7 +691,11 @@ class CitasController:
                             st.rerun()
 
     def render_historial(self, persona_names):
-        views.render_section_header("📖", "Historial Clínico", "Registro completo de citas y emergencias de cada persona.")
+        views.render_section_header(
+            "📖", "Historial Clínico",
+            "Registro completo de citas y emergencias de cada persona.",
+            tone="indigo",
+        )
         filtro = self.render_filtro_paciente(persona_names, key="filtro_hist")
         todas = self.model.get_all()
         vista = CitaModel.filtrar_por_paciente(todas, filtro)
@@ -686,7 +706,13 @@ class CitasController:
 
         cont_realizadas = sum(1 for c in vista.values() if c.get("estado") == "realizada")
         cont_programadas = sum(1 for c in vista.values() if c.get("estado", "programada") == "programada")
-        st.caption(f"**{len(vista)}** registro(s) — {cont_programadas} pendiente(s) · {cont_realizadas} realizada(s)")
+        cont_emergencias = sum(1 for c in vista.values() if c.get("es_emergencia"))
+        views.render_stat_strip([
+            {"value": len(vista), "label": "registro(s)", "icon": "📖", "tone": "indigo"},
+            {"value": cont_emergencias, "label": "emergencia(s)", "icon": "🚨", "tone": "red"},
+            {"value": cont_programadas, "label": "pendiente(s)", "icon": "⏳", "tone": "amber"},
+            {"value": cont_realizadas, "label": "realizada(s)", "icon": "✅", "tone": "green"},
+        ])
 
         for key, cita in CitaModel.ordenar_por_fecha(vista, descendente=True):
             es_emergencia = cita.get("es_emergencia", False)
@@ -704,30 +730,23 @@ class CitasController:
             with st.expander(titulo):
                 st.markdown(views.cita_estado_banner(cita), unsafe_allow_html=True)
                 st.markdown(estado_badge, unsafe_allow_html=True)
-                st.markdown(f"**🏥 Lugar:** {cita.get('lugar', '—')}")
-
-                if es_emergencia:
-                    if cita.get("motivo_emergencia"):
-                        st.markdown(f"**🚨 Motivo de emergencia:** {cita.get('motivo_emergencia')}")
-                    if cita.get("atencion_recibida"):
-                        st.markdown(f"**🩹 Atención recibida:** {cita.get('atencion_recibida')}")
-                    if cita.get("notas"):
-                        st.markdown(f"**📝 Notas:** {cita.get('notas')}")
-                else:
-                    if cita.get("diagnostico"):
-                        st.markdown(f"**🩺 Diagnóstico:** {cita.get('diagnostico')}")
-                    if cita.get("tratamiento"):
-                        st.markdown(f"**💊 Tratamiento:** {cita.get('tratamiento')}")
-                    if cita.get("recomendaciones"):
-                        st.markdown(f"**📋 Recomendaciones:** {cita.get('recomendaciones')}")
-                    if cita.get("proxima_cita_sugerida"):
-                        st.markdown(f"**⏭️ Próxima sugerida:** {cita.get('proxima_cita_sugerida')}")
+                views.render_info_rows([
+                    ("🏥", "Lugar", cita.get("lugar")),
+                    ("🚨", "Motivo de emergencia", cita.get("motivo_emergencia")),
+                    ("🩹", "Atención recibida", cita.get("atencion_recibida")),
+                    ("🕐", "Hora", cita.get("hora")),
+                    ("📝", "Notas", cita.get("notas")),
+                    ("🩺", "Diagnóstico", cita.get("diagnostico")),
+                    ("💊", "Tratamiento", cita.get("tratamiento")),
+                    ("📋", "Recomendaciones", cita.get("recomendaciones")),
+                    ("⏭️", "Próxima sugerida", cita.get("proxima_cita_sugerida")),
+                ])
 
                 if not es_emergencia and not es_realizada:
                     st.markdown("")
                     with st.popover("✅ Marcar como realizada"):
                         with st.form(f"hist_realizada_{key}"):
-                            views.render_section_header("📋", "Registrar Resultado")
+                            views.render_section_header("📋", "Registrar Resultado", tone="indigo", compact=True)
                             diagnostico = st.text_area("Diagnóstico / Resultado", key=f"hist_diag_{key}")
                             tratamiento = st.text_area("Tratamiento / Medicamentos", key=f"hist_trat_{key}")
                             recomendaciones = st.text_area("Recomendaciones", key=f"hist_reco_{key}")
@@ -751,7 +770,11 @@ class CitasController:
                     st.rerun()
 
     def render_lista_emergencias(self, persona_names):
-        views.render_section_header("🚨", "Emergencias", "Eventos de urgencia registrados y su atención.")
+        views.render_section_header(
+            "🚨", "Emergencias",
+            "Eventos de urgencia registrados y su atención.",
+            tone="red",
+        )
         filtro = self.render_filtro_paciente(persona_names, key="filtro_emerg")
         emergencias = self.model.get_emergencias()
         vista = CitaModel.filtrar_por_paciente(emergencias, filtro)
@@ -761,21 +784,21 @@ class CitasController:
             return
 
         total = len(vista)
-        st.caption(f"**{total}** emergencia(s) registrada(s)")
+        views.render_stat_strip([
+            {"value": total, "label": "emergencia(s) registrada(s)", "icon": "🚨", "tone": "red"},
+        ])
 
         for key, em in CitaModel.ordenar_por_fecha(vista, descendente=True):
             titulo = f"🚨 {em.get('fecha')} — {em.get('paciente')}: {em.get('motivo_emergencia', 'Emergencia')}"
             with st.expander(titulo):
                 st.markdown(views.badge_emergencia(em.get('paciente')), unsafe_allow_html=True)
-                st.markdown(f"**🏥 Lugar:** {em.get('lugar', '—')}")
-                if em.get("motivo_emergencia"):
-                    st.markdown(f"**🚨 Motivo:** {em.get('motivo_emergencia')}")
-                if em.get("atencion_recibida"):
-                    st.markdown(f"**🩹 Atención recibida:** {em.get('atencion_recibida')}")
-                if em.get("hora"):
-                    st.markdown(f"**🕐 Hora:** {em.get('hora')}")
-                if em.get("notas"):
-                    st.markdown(f"**📝 Notas:** {em.get('notas')}")
+                views.render_info_rows([
+                    ("🏥", "Lugar", em.get("lugar")),
+                    ("🚨", "Motivo", em.get("motivo_emergencia")),
+                    ("🩹", "Atención recibida", em.get("atencion_recibida")),
+                    ("🕐", "Hora", em.get("hora")),
+                    ("📝", "Notas", em.get("notas")),
+                ])
 
                 st.caption(f"Registrada por {em.get('registrado_por', '—')}")
 
@@ -794,7 +817,7 @@ class MedicinasController:
     def render_form_registrar(self, usuario, persona_names):
         with st.popover("➕ Registrar Recogida de Medicinas", use_container_width=True):
             with st.form("form_medicinas", clear_on_submit=True):
-                views.render_section_header("💊", "Recogida de Medicinas")
+                views.render_section_header("💊", "Recogida de Medicinas", tone="green", compact=True)
                 if persona_names:
                     paciente = st.selectbox("A quién pertenece", persona_names)
                 else:
@@ -837,7 +860,11 @@ class MedicinasController:
                         st.rerun()
 
     def render_lista(self, persona_names):
-        views.render_section_header("💊", "Control de Medicinas", "Control de recogidas, a quién pertenecen y duración del tratamiento.")
+        views.render_section_header(
+            "💊", "Control de Medicinas",
+            "Control de recogidas, a quién pertenecen y duración del tratamiento.",
+            tone="green",
+        )
         filtro = CitasController.render_filtro_paciente(persona_names, key="filtro_med")
         medicinas = self.model.get_all()
         vista = MedicinaModel.filtrar_por_paciente(medicinas, filtro)
@@ -847,7 +874,12 @@ class MedicinasController:
             return
 
         total = len(vista)
-        st.caption(f"**{total}** registro(s) de medicinas")
+        activas = sum(1 for med in vista.values() if self._med_activa(med))
+        views.render_stat_strip([
+            {"value": total, "label": "registro(s)", "icon": "💊", "tone": "teal"},
+            {"value": activas, "label": "activo(s)", "icon": "✅", "tone": "green"},
+            {"value": total - activas, "label": "agotado(s)", "icon": "⏳", "tone": "amber"},
+        ])
 
         for key, med in MedicinaModel.ordenar_por_fecha(vista):
             tipo = med.get("tipo", "temporal")
@@ -860,24 +892,25 @@ class MedicinasController:
                     ),
                     unsafe_allow_html=True,
                 )
-                if med.get("presentacion"):
-                    st.markdown(f"**📦 Presentación:** {med.get('presentacion')}")
-                if med.get("cantidad"):
-                    st.markdown(f"**⚖️ Cantidad por toma:** {med.get('cantidad')}")
-                if med.get("frecuencia"):
-                    st.markdown(f"**🕐 Frecuencia:** {med.get('frecuencia')}")
-                st.markdown(f"**📅 Inicio / recogida:** {med.get('fecha_recojo')}")
-                if tipo == "continuo":
-                    st.markdown("**🔁 Tipo:** Tratamiento continuo (sin fecha de fin)")
-                else:
-                    st.markdown(f"**📆 Tipo:** Temporal · **Días:** {med.get('dias')}")
-                    dias_rest = MedicinaModel.dias_restantes(med.get('fecha_recojo'), med.get('dias'), tipo)
-                    if dias_rest is not None:
-                        st.markdown(f"**⏳ Días restantes:** {dias_rest}")
-                if med.get("indicacion"):
-                    st.markdown(f"**💡 Indicación:** {med.get('indicacion')}")
-                if med.get("notas"):
-                    st.markdown(f"**📝 Notas:** {med.get('notas')}")
+                dias_rest = (None if tipo == "continuo"
+                             else MedicinaModel.dias_restantes(
+                                 med.get('fecha_recojo'), med.get('dias'), tipo))
+                tipo_detalle = ("🔁 Continuo (sin fecha de fin)" if tipo == "continuo"
+                                else f"📆 Temporal · {med.get('dias')} día(s)")
+                dias_txt = None
+                if dias_rest is not None:
+                    dias_txt = (f"{dias_rest} día(s)" if dias_rest >= 0
+                                else f"Agotada hace {abs(dias_rest)} día(s)")
+                views.render_info_rows([
+                    ("📦", "Presentación", med.get("presentacion")),
+                    ("⚖️", "Cantidad por toma", med.get("cantidad")),
+                    ("🕐", "Frecuencia", med.get("frecuencia")),
+                    ("📅", "Inicio / recogida", med.get("fecha_recojo")),
+                    ("📆", "Tipo", tipo_detalle),
+                    ("⏳", "Días restantes", dias_txt),
+                    ("💡", "Indicación", med.get("indicacion")),
+                    ("📝", "Notas", med.get("notas")),
+                ])
                 st.caption(f"Registrado por {med.get('registrado_por', '—')}")
 
                 if st.button("🗑️ Eliminar", key=f"del_med_{key}"):
@@ -893,10 +926,17 @@ class MedicinasController:
 
     def render_resumen_historial(self, persona_names):
         """Resumen de medicinas por persona para integrarlo en el historial clínico."""
-        views.render_section_header("💊", "Medicinas por Persona", "Tratamientos continuos y temporales que cada persona debe tomar.")
+        views.render_section_header(
+            "💊", "Medicinas por Persona",
+            "Tratamientos continuos y temporales que cada persona debe tomar.",
+            tone="green",
+        )
         medicinas = self.model.get_all()
         if not medicinas:
-            st.caption("Aún no hay medicinas registradas para ninguna persona.")
+            views.render_empty_state(
+                "💊", "Sin medicinas",
+                "Registra una recogida en la sección Medicinas para verla aquí.",
+            )
             return
 
         por_persona = {}
@@ -917,36 +957,38 @@ class MedicinasController:
             items = sorted(items, key=_orden)
             activos = sum(1 for _, m in items if self._med_activa(m))
             with st.expander(f"💊 {persona} — {len(items)} medicamento(s) · {activos} activo(s)"):
-                for key, med in items:
+                for idx, (key, med) in enumerate(items):
                     tipo = med.get("tipo", "temporal")
-                    cabecera = f"**{med.get('medicamento', '—')}**"
-                    if med.get("presentacion"):
-                        cabecera += f" · {med.get('presentacion')}"
-                    st.markdown(cabecera)
+                    views.render_mini_header(
+                        f"💊 {med.get('medicamento', '—')}",
+                        med.get("presentacion", ""),
+                    )
                     st.markdown(
                         views.badge_medicina_estado(
                             med.get('fecha_recojo'), med.get('dias'), med.get('paciente'), tipo
                         ),
                         unsafe_allow_html=True,
                     )
-                    detalles = []
-                    if med.get("cantidad"):
-                        detalles.append(f"⚖️ {med.get('cantidad')}")
-                    if med.get("frecuencia"):
-                        detalles.append(f"🕐 {med.get('frecuencia')}")
-                    if detalles:
-                        st.caption(" · ".join(detalles))
                     if tipo == "continuo":
-                        st.caption(f"🔁 Continuo · desde {med.get('fecha_recojo')}")
+                        tipo_detalle = "🔁 Continuo · sin fecha de fin"
+                        dias_txt = None
                     else:
                         dr = MedicinaModel.dias_restantes(med.get('fecha_recojo'), med.get('dias'), tipo)
-                        extra = ""
+                        tipo_detalle = f"📆 Temporal · {med.get('dias')} día(s)"
+                        dias_txt = None
                         if dr is not None:
-                            extra = f" · quedan {dr} día(s)" if dr >= 0 else f" · agotada hace {abs(dr)} día(s)"
-                        st.caption(f"📆 Temporal · {med.get('dias')} días{extra}")
-                    if med.get("indicacion"):
-                        st.caption(f"💡 {med.get('indicacion')}")
-                    st.divider()
+                            dias_txt = (f"{dr} día(s)" if dr >= 0
+                                        else f"Agotada hace {abs(dr)} día(s)")
+                    views.render_info_rows([
+                        ("⚖️", "Cantidad", med.get("cantidad")),
+                        ("🕐", "Frecuencia", med.get("frecuencia")),
+                        ("📅", "Desde", med.get("fecha_recojo")),
+                        ("📆", "Tipo", tipo_detalle),
+                        ("⏳", "Días restantes", dias_txt),
+                        ("💡", "Indicación", med.get("indicacion")),
+                    ])
+                    if idx < len(items) - 1:
+                        st.divider()
 
 
 # -------------------------------------------------------------
@@ -959,7 +1001,7 @@ class ServiciosController:
     def render_form_registrar(self, usuario):
         with st.popover("➕ Registrar Código", use_container_width=True):
             with st.form("form_servicios", clear_on_submit=True):
-                views.render_section_header("💡", "Nuevo Servicio")
+                views.render_section_header("💡", "Nuevo Servicio", tone="amber", compact=True)
                 tipo = st.selectbox("Tipo de servicio", ["⚡ Luz", "💧 Agua", "🔥 Gas", "🌐 Internet", "📞 Teléfono", "Otro"])
                 empresa = st.text_input("Empresa proveedora", placeholder="Ej. Enel, Sedapal")
                 codigo = st.text_input("Código de pago / Suministro", placeholder="Ej. 12345678")
@@ -991,13 +1033,16 @@ class ServiciosController:
             views.render_empty_state("💡", "Sin servicios registrados", "Registra el primer código de pago usando el botón de arriba.")
             return
 
+        views.render_stat_strip([
+            {"value": len(vista), "label": "código(s) de pago",
+             "icon": "💡", "tone": "amber"},
+        ])
+
         for key, servicio in vista.items():
-            col_info, col_actions = st.columns([5, 1])
+            col_info, col_actions = st.columns([6, 1], vertical_alignment="center")
             with col_info:
                 views.render_service_info(servicio)
             with col_actions:
-                st.write("")
-                st.write("")
-                if st.button("🗑️", key=f"del_serv_{key}"):
+                if st.button("🗑️", key=f"del_serv_{key}", help="Eliminar servicio"):
                     self.model.eliminar(key)
                     st.rerun()

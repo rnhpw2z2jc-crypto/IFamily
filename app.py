@@ -31,7 +31,7 @@ st.set_page_config(
 st.markdown("""
 <link rel="manifest" href="app/static/manifest.json">
 <meta name="theme-color" content="#00BCD4">
-<div id="ifamily-version" data-version="2.4-tiles-full-click" style="display:none;"></div>
+<div id="ifamily-version" data-version="2.5-inner-screens" style="display:none;"></div>
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="apple-touch-icon" href="app/static/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -322,7 +322,7 @@ def render_vista_actual():
         medicinas_controller.render_lista(persona_names)
 
     elif vista == "servicios":
-        views.render_section_header("💡", "Servicios Públicos y Facturas", "Códigos de pago de luz, agua, gas e internet.")
+        views.render_section_header("💡", "Servicios Públicos y Facturas", "Códigos de pago de luz, agua, gas e internet.", tone="amber")
 
         col_filter, col_action = st.columns([3, 1])
         with col_filter:
@@ -333,7 +333,7 @@ def render_vista_actual():
         servicios_controller.render_lista(filtro_tipo)
 
     elif vista == "personas":
-        views.render_section_header("👤", "Personas de Seguimiento", "Agrega a quienes deseas hacer seguimiento.")
+        views.render_section_header("👤", "Personas de Seguimiento", "Agrega a quienes deseas hacer seguimiento.", tone="violet")
 
         personas_controller.render_form_crear(nombre_usuario)
         personas_controller.render_lista()
